@@ -291,7 +291,7 @@ Code completed and testing not started. Planned endpoints, both serving the sche
 
 ## Phase 3: Dashboard UI
 
-Owned by the UI teammate. The contract is `PrescriptiveRecommendation`, served by
+Not Started. The contract is `PrescriptiveRecommendation`, served by
 the endpoints above. Start the API with `make api` and browse `/docs` for a live,
 executable reference. `python -m backend.demo --json` still prints example
 payloads if you want them without a running server.
