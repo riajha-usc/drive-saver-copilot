@@ -76,13 +76,25 @@ Simulates industrial machinery operating conditions and carries the exact VFD an
 ```
 drive-saver-copilot/
   backend/
-    config.py     paths, thresholds, cost constants, LLM settings
-    physics.py    AI4I failure rules, operating point, margins to each limit
-    ml/           dataset, training, RUL proxy, SHAP, inference
-    agent/        counterfactual simulation, LangGraph graph, output schema
-  tests/
-  data/raw/       cached AI4I CSV, fetched on first run
-  models/         trained bundle and metrics
+    config.py            paths, thresholds, cost constants, LLM settings
+    physics.py           AI4I failure rules, operating point, margins to each limit
+    ml/
+      dataset.py         Task 1a  fetch, clean, feature engineering, split
+      train.py           Task 1b  five XGBoost heads, thresholds, metrics
+      bundle.py          serialisable model artifact
+      rul.py             probability to hours, the RUL proxy
+      explain.py         Task 2   SHAP attributions and the controllable lever
+      predict.py         inference facade: risk, RUL, root cause, margins
+    agent/
+      counterfactual.py  Task 3a  adjustment grid, feasibility guards, selector
+      economics.py       cost model behind the savings figure
+      llm.py             narration, LLM optional with a deterministic fallback
+      graph.py           Task 3   the LangGraph state machine
+      schema.py          Task 4   the strict Pydantic output contract
+    demo.py              runnable Phase 1 walkthrough
+  tests/                 54 tests across physics, ML, SHAP, agent and schema
+  data/raw/              cached AI4I CSV
+  models/                trained bundle and metrics.json
 ```
 
 ## Quickstart
@@ -96,16 +108,155 @@ brew install libomp
 Then:
 
 ```bash
-make setup
-make train
-make test
+make setup      # venv plus requirements
+make train      # fetches AI4I from UCI on first run, trains, writes models/
+make test       # 54 tests
+make demo       # one prescriptive card per failure mode, on real dataset rows
 ```
+
+`make demo --json` is available as `python -m backend.demo --json` and prints the
+exact payloads Phase 2 will serve.
 
 An Anthropic API key is optional. Copy `.env.example` to `.env` and set
 `ANTHROPIC_API_KEY` to have the LLM write the operator card. Without it the
 deterministic narrator runs and every number is unchanged.
 
-## Status
+## Phase 1 Status
 
-Scaffolding in place: configuration, the AI4I failure rules as a shared physics
-module, and the test harness. The nine implementation tasks follow.
+All four Phase 1 tasks are complete and tested.
+
+### Task 1: dataset pipeline and model training
+
+10,000 rows, no rows dropped. Five gradient boosted heads on a shared feature
+frame of the six raw signals plus four derived features (`temp_diff`, `power_w`,
+`wear_torque`, `osf_utilisation`). Operating thresholds are picked on an inner
+validation split so the test numbers below are clean.
+
+| Head | PR AUC | ROC AUC | Precision | Recall |
+| --- | --- | --- | --- | --- |
+| machine_failure | 0.863 | 0.975 | 0.902 | 0.809 |
+| HDF | 0.986 | 1.000 | 0.931 | 0.931 |
+| PWF | 0.866 | 0.999 | 0.813 | 1.000 |
+| OSF | 1.000 | 1.000 | 0.941 | 1.000 |
+| TWF | 0.066 | 0.904 | 0.053 | 0.100 |
+
+TWF is weak on purpose and the caveat is carried in the payload. The AI4I
+generator places the tool wear failure at a random point inside the 200 to 240
+minute window, so nothing in the feature set can time it. The agent handles TWF
+by prescribing a tool change rather than a setpoint trim.
+
+### Remaining Useful Life
+
+AI4I is a snapshot dataset with no run to failure timeline, so a true RUL label
+does not exist. Rather than invent one, failure probability is converted to hours
+through an explicit constant hazard model anchored on a 72 hour reference horizon,
+capped at 720 hours. Every payload flags `rul_is_proxy: true` and repeats the
+caveat in plain English. The mapping is strictly decreasing, which is the only
+property the prescriptive layer needs: any adjustment that lowers risk shows up
+as hours gained.
+
+### Task 2: SHAP attribution
+
+TreeExplainer over the trained heads. Each factor carries its log odds value, its
+direction, and its share of the total upward push, which is what the UI renders as
+root cause confidence. Attributions are also rolled up to a controllable lever
+(torque, speed, ambient, maintenance) so the agent knows which knob to reach for.
+Features that hold risk down are never reported as a root cause.
+
+### Task 3: LangGraph prescriptive agent
+
+```
+ingest -> diagnose -> simulate -> decide -> narrate -> validate
+```
+
+Every node is a pure function over shared state, so each is unit tested on its own
+and the whole graph runs offline. The LLM appears in exactly one node and only
+writes prose. Every number comes from the model, the physics rules or the cost
+model, which keeps the prescription auditable.
+
+The counterfactual engine sweeps a torque and speed grid, rebuilds the operating
+point, rescores it, and converts the probability change into hours. Three things
+keep the answers honest:
+
+1. **Feasibility guard.** A candidate is rejected if it trips a limit the current
+   point respects. Cutting torque 10 percent is the obvious move against
+   overstrain, but on a lightly loaded drive it pushes shaft power under the
+   3500 W floor and buys a Power Failure instead.
+2. **Fault tiering.** Candidates that actually clear the breached limit are ranked
+   above ones that merely score lower. Without this a tool change wins on cost
+   against a heat dissipation fault it does nothing about, because wear correlates
+   with risk across the dataset.
+3. **Stop instead of dress up.** When a limit is genuinely breached and no setpoint
+   inside the drive's range clears it, the agent returns `stop_now` with no
+   adjustments rather than promising hours it cannot deliver. The best palliative
+   is still listed under alternatives.
+
+Among the candidates that survive, the selector takes the smallest intervention:
+least output given up, then the smallest setpoint move, then the largest risk
+reduction.
+
+Heat Dissipation Failure is the case that shows the engine is reasoning about
+physics rather than pattern matching. HDF needs the temperature spread below
+8.6 K **and** speed below 1380 rpm, so the fix is to speed the drive up, not
+throttle it. The agent prescribes a speed increase with zero output loss.
+
+### Task 4: structured output
+
+`PrescriptiveRecommendation` in `backend/agent/schema.py`. Strict Pydantic with
+`extra="forbid"`, closed enums for risk band, failure mode and action type, and
+bounded probabilities. Nothing leaves the agent unvalidated. Top level fields:
+
+`asset_id`, `generated_at`, `model_trained_at`, `telemetry`, `risk`, `root_cause`,
+`action_type`, `adjustments`, `projection`, `economics`, `narrative`,
+`alternatives`, `confidence`, `caveats`, `schema_version`.
+
+`action_type` is one of `derate`, `reconfigure`, `schedule_maintenance`,
+`no_action`, `stop_now`.
+
+## Sample Output
+
+Real AI4I row, an overstrained L class drive:
+
+```
+VFD-MOTOR-03   CRITICAL   99.9 percent risk of Power Failure
+  telemetry     65.7 Nm at 1410 rpm, 9701 W, spread 10.1 K, wear 191 min
+  limits hit    PWF, OSF
+  root cause    Shaft power is the dominant contributor at 40 percent of the upward risk push
+                wear times torque against the overstrain limit is past the limit by 1548.7 min Nm
+
+  ACTION        reconfigure
+                VFD torque setpoint: 65.7 -> 57.49 Nm (-12.5 percent)
+                VFD speed setpoint: 1410.0 -> 1480.5 rpm (+5.0 percent)
+
+  life          10.6 h -> 96.4 h (+85.8 h), window at 48.0 h reached
+  risk          0.999 -> 0.526
+  output cost   8.1 percent
+  net benefit   $4,284 ($7,987 avoided less $3,703 output)
+  confidence    0.99
+```
+
+## Phase 2: Backend API Layer
+
+Not started. Planned endpoints, both serving the schema above unchanged:
+
+5. **Ingestion.** `POST /telemetry` accepts a CSV upload or a JSON batch, returns
+   per row risk, RUL proxy and likely mode from `score_frame`.
+6. **Prescription.** `POST /assets/{asset_id}/recommendation` runs the LangGraph
+   agent for one operating point and a maintenance window, returns
+   `PrescriptiveRecommendation`.
+
+## Phase 3: Dashboard UI
+
+Owned by the UI teammate. The contract is `PrescriptiveRecommendation`. Run
+`python -m backend.demo --json` for live example payloads to build against before
+the API exists.
+
+## Notes and Limitations
+
+- The RUL figure is a proxy, not a measured time to failure. It is labelled as such
+  in the payload and in every card.
+- Economic figures rest on four configurable constants, all surfaced in the payload
+  under `economics.assumptions`.
+- Throughput loss is modelled as the drop in mechanical shaft power. A real line
+  would map this to units per hour.
+- RNF, the 0.1 percent random failure flag, is excluded from the modelled modes.

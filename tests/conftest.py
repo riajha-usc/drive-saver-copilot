@@ -32,3 +32,12 @@ def low_power_point():
     """Near the 3500 W floor, where a naive torque cut causes a Power Failure."""
     return OperatingPoint("L", 297.0, 305.4, 1370, 26.0, 150)
 
+
+@pytest.fixture
+def unfixable_point():
+    """A real AI4I power fault: 1378 W against a 3500 W floor.
+
+    No torque or speed trim inside the drive's range gets back into the band,
+    so the only honest answer is to take the asset off line.
+    """
+    return OperatingPoint("L", 298.5, 308.7, 2861, 4.6, 143)
