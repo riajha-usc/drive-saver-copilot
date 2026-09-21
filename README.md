@@ -281,7 +281,7 @@ VFD-MOTOR-03   CRITICAL   99.9 percent risk of Power Failure
 
 ## Phase 2: Backend API Layer
 
-Not started. Planned endpoints, both serving the schema above unchanged:
+Code completed and testing not started. Planned endpoints, both serving the schema above unchanged:
 
 5. **Ingestion.** `POST /telemetry` accepts a CSV upload or a JSON batch, returns
    per row risk, RUL proxy and likely mode from `score_frame`.
