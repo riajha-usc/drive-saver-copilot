@@ -53,19 +53,19 @@ Simulates industrial machinery operating conditions and carries the exact VFD an
 
 ## Implementation Tasks
 
-### Phase 1: Core ML and Agent Logic (Backend)
+### Phase 1: Core ML and Agent Logic (Backend) - Completed
 
 1. **Dataset pipeline and model training.** Clean the motor/VFD telemetry CSV and train an XGBoost or LightGBM model to predict failure risk or Remaining Useful Life.
 2. **SHAP feature attribution.** Extract the top failure-contributing features for any high-risk data point, such as high winding temperature or excessive torque spikes.
 3. **LangGraph prescriptive agent engine.** Take the model output plus SHAP values, run a counterfactual simulation (if torque drops 10 percent, projected life increases by 48 hours), and generate plain-English prescriptive advice.
 4. **Structured JSON output schema.** Enforce a strict response schema carrying failure risk, root cause, prescribed adjustments, and projected hour extension so the API can consume it directly.
 
-### Phase 2: Backend API Layer
+### Phase 2: Backend API Layer - Completed
 
 5. **FastAPI setup and ingestion endpoint.** Routes that accept telemetry uploads and return model predictions.
 6. **Prescriptive agent endpoint.** Trigger the LangGraph agent for a selected high-risk motor and serve the structured recommendation payload.
 
-### Phase 3: Dashboard UI
+### Phase 3: Dashboard UI - Boilerplate is there but not completed
 
 7. **Telemetry and failure alert interface.** Asset selector, telemetry line charts for temperature, RPM, and torque, plus a prominent red alert box showing health status.
 8. **Prescriptive recommendation panel.** An interactive card showing the prescribed parameter change, projected RUL extension in hours, estimated cost savings, and an "Implement Adjustment" button.
