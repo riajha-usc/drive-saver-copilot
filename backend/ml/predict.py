@@ -97,7 +97,7 @@ def predict(op: physics.OperatingPoint, bundle=None, explain: bool = True) -> Pr
     mode_probs = {m: probs[m] for m in FAILURE_MODES if m in probs}
 
     violations = physics.rule_failures(op)
-    band = risk_band(p_fail)
+    band = risk_band(p_fail, violations)
     # Trust an actual rule violation over the learned head when naming the mechanism,
     # and name no mechanism at all on an asset that is not at risk.
     if violations:

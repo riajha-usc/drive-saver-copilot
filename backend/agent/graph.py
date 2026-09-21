@@ -65,7 +65,8 @@ def diagnose(state: AgentState) -> dict:
 def simulate_node(state: AgentState) -> dict:
     """Run the counterfactual grid, unless the asset is already healthy."""
     pred = state["prediction"]
-    if pred.failure_probability < ACTION_THRESHOLD:
+    # A breached limit always earns a simulation, however low the model reads.
+    if pred.failure_probability < ACTION_THRESHOLD and not pred.rule_violations:
         return {"candidates": [], "trace": ["simulate skipped, risk below action threshold"]}
     cands = simulate(state["operating_point"], bundle=state["bundle"])
     return {"candidates": cands, "trace": [f"simulate {len(cands)} candidates"]}
@@ -188,6 +189,10 @@ def _caveats(state: AgentState, chosen: Candidate | None) -> list[str]:
     if state.get("unresolved"):
         out.append(f"No available setpoint change clears {', '.join(state['unresolved'])}. "
                    "The action below buys time, it does not remove the fault.")
+    if pred.rule_violations and pred.failure_probability < ACTION_THRESHOLD:
+        out.append(f"The model reads this asset as low risk, but "
+                   f"{', '.join(pred.rule_violations)} is breached on the telemetry. "
+                   "The breached limit is the fact, the score is the estimate.")
     if pred.likely_mode == "TWF":
         out.append("The tool wear head is weak on this dataset (PR AUC 0.07) because the "
                    "failure point inside the wear window is random by construction.")

@@ -31,8 +31,20 @@ def probability_to_rul_hours(p: float, horizon_h: float | None = None) -> float:
     return round(min(max(1.0 / lam, config.RUL_MIN_H), config.RUL_MAX_H), 1)
 
 
-def risk_band(p: float) -> str:
+def risk_band(p: float, violations=()) -> str:
+    """Band the failure probability, with a floor for breached physical limits.
+
+    The band is probability derived, but it never reports normal while a
+    deterministic AI4I limit is actually breached. The TWF head is the case that
+    forces this: the failure point inside the tool wear window is random by
+    construction, so the model reads low on a machine whose wear window is
+    demonstrably open. Reporting that as normal hides a fact we know for certain.
+    """
+    band = "normal"
     for threshold, label in config.RISK_BANDS:
         if p >= threshold:
-            return label
-    return "normal"
+            band = label
+            break
+    if violations and band == "normal":
+        return "elevated"
+    return band

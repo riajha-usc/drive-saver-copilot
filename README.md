@@ -92,7 +92,7 @@ drive-saver-copilot/
       graph.py           Task 3   the LangGraph state machine
       schema.py          Task 4   the strict Pydantic output contract
     demo.py              runnable Phase 1 walkthrough
-  tests/                 54 tests across physics, ML, SHAP, agent and schema
+  tests/                 67 tests, including a whole pipeline regression harness
   data/raw/              cached AI4I CSV
   models/                trained bundle and metrics.json
 ```
@@ -110,7 +110,7 @@ Then:
 ```bash
 make setup      # venv plus requirements
 make train      # fetches AI4I from UCI on first run, trains, writes models/
-make test       # 54 tests
+make test       # 67 tests
 make demo       # one prescriptive card per failure mode, on real dataset rows
 ```
 
@@ -250,6 +250,31 @@ Not started. Planned endpoints, both serving the schema above unchanged:
 Owned by the UI teammate. The contract is `PrescriptiveRecommendation`. Run
 `python -m backend.demo --json` for live example payloads to build against before
 the API exists.
+
+## Testing
+
+67 tests. The unit modules pin one behaviour each against a hand built operating
+point. `tests/test_integration.py` runs sampled real rows through the full graph
+and asserts the invariants that must hold for every row rather than only the ones
+someone wrote a fixture for:
+
+- no prescription ever introduces a failure the asset did not already have
+- a prescription either clears the breached limit or returns `stop_now` and says
+  it cannot
+- projection and economics arithmetic is self consistent
+- `action_type` matches the payload it ships with
+- every payload round trips through the schema
+- healthy assets are not alarmed, failing assets are never silent
+- batch scoring agrees with single point scoring
+- the agent is deterministic, so a demo does not drift between runs
+
+That harness caught a real bug on its first run. A row with tool wear inside the
+200 to 240 minute change window scored 0.009 and was reported as `normal` with
+`no_action`, because the TWF head cannot time a failure the generator places at
+random. A breached limit is a fact and the score is only an estimate, so the risk
+band now floors at `elevated` whenever a deterministic limit is breached, the
+agent always simulates in that case, and the payload carries a caveat naming the
+disagreement.
 
 ## Notes and Limitations
 
