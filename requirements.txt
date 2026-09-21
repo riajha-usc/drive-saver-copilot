@@ -1,0 +1,13 @@
+# Phase 1: ML, explainability and the agent. Phase 2 adds FastAPI on top.
+ucimlrepo==0.0.7
+pandas==3.0.6
+numpy==2.5.3
+scikit-learn==1.9.1
+xgboost==3.4.1
+shap==0.52.0
+joblib==1.6.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+langgraph==1.2.11
+langchain-anthropic==1.7.2
+pytest==9.1.1
