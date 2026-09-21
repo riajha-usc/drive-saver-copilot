@@ -16,7 +16,6 @@ models/
 frontend/node_modules/
 frontend/dist/
 .env
-render.yaml
 Makefile
 README.md
 requirements-dev.txt

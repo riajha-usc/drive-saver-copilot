@@ -152,6 +152,11 @@ validation split so the test numbers below are clean.
 | OSF | 1.000 | 1.000 | 0.941 | 1.000 |
 | TWF | 0.066 | 0.904 | 0.053 | 0.100 |
 
+Figures are from one training run on macOS. They move by a few thousandths on
+another platform, because gradient boosting is not bit identical across builds.
+`models/` is generated output and is not tracked, so `make train` regenerates
+these numbers locally.
+
 TWF is weak on purpose and the caveat is carried in the payload. The AI4I
 generator places the tool wear failure at a random point inside the 200 to 240
 minute window, so nothing in the feature set can time it. The agent handles TWF
@@ -393,11 +398,11 @@ Cloud Run ignores the `HEALTHCHECK` in the Dockerfile and uses its own startup
 probe against the container port. `/health` is still the right path to point any
 external uptime check at.
 
-### Render (alternative)
+### Other hosts
 
-`render.yaml` is a working blueprint if you would rather not use GCP. The free
-tier sleeps after about 15 minutes idle and this image takes roughly a minute to
-wake, so either keep the paid starter instance or ping `/health` on a schedule.
+The image is a plain container, so Railway, Fly.io and Render all run it without
+changes. Watch the sleep behaviour on free tiers: this image takes roughly a
+minute to wake, which is a poor way to open a demo link.
 
 ### Environment
 

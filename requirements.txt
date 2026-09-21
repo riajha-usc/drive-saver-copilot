@@ -7,7 +7,6 @@ xgboost==3.4.1
 shap==0.52.0
 joblib==1.6.0
 pydantic==2.13.5
-pydantic-settings==2.15.0
 langgraph==1.2.11
 langchain-anthropic==1.7.2
 fastapi==0.141.1

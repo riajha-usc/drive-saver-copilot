@@ -6,6 +6,6 @@ __pycache__/
 # The AI4I sample is tracked so builds and deploys are hermetic.
 data/raw/*.csv
 !data/raw/ai4i2020.csv
-models/*.joblib
+models/
 frontend/node_modules/
 frontend/dist/

@@ -10,7 +10,15 @@ from backend.ml.dataset import frame_from_records
 from backend.ml.predict import predict, failure_probability, score_frame
 
 
-def test_metrics_meet_the_bar_recorded_at_training_time():
+def test_metrics_meet_the_bar_recorded_at_training_time(bundle):
+    """Metrics come from the last training run, not from a file in git.
+
+    models/ is generated output and is not tracked, so this asserts against what
+    this machine actually trained. Exact figures move a little between platforms;
+    the bars below are what the design depends on.
+    """
+    if not config.METRICS_JSON.exists():
+        pytest.skip("no metrics.json; run python -m backend.ml.train")
     metrics = json.loads(config.METRICS_JSON.read_text())["heads"]
     assert metrics["machine_failure"]["pr_auc"] > 0.80
     assert metrics["machine_failure"]["roc_auc"] > 0.95
