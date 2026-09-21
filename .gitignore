@@ -7,3 +7,5 @@ __pycache__/
 data/raw/*.csv
 !data/raw/ai4i2020.csv
 models/*.joblib
+frontend/node_modules/
+frontend/dist/

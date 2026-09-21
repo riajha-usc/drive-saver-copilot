@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend import config
 from backend.api.routers import assets, meta, recommendations, telemetry
+from backend.api.static import mount_dashboard
 from backend.api.store import store
 from backend.ml.predict import ModelNotTrained, load_bundle
 
@@ -31,6 +32,9 @@ Most tooling stops at "this motor will fail in 20 hours". These endpoints go one
 step further and return the parameter change that pushes the failure past the
 next planned maintenance window, with the projected hours gained and what the
 derate costs in output.
+
+The dashboard is served from this same app at `/` when it has been built, so the
+browser origin is already correct and there is no CORS to configure.
 
 Typical dashboard flow:
 
@@ -80,6 +84,9 @@ def create_app() -> FastAPI:
     app.include_router(telemetry.router)
     app.include_router(assets.router)
     app.include_router(recommendations.router)
+
+    # Last, so the single page app catch all cannot shadow an API route.
+    mount_dashboard(app)
     return app
 
 

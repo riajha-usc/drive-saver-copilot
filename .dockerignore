@@ -7,6 +7,8 @@ __pycache__
 *.pyc
 tests/
 models/
+frontend/node_modules/
+frontend/dist/
 data/
 !data/raw/ai4i2020.csv
 README.md

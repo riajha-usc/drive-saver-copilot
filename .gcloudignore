@@ -13,6 +13,8 @@ __pycache__
 *.pyc
 tests/
 models/
+frontend/node_modules/
+frontend/dist/
 .env
 render.yaml
 Makefile

@@ -1,10 +1,28 @@
-# Drive-Saver Copilot API.
+# Drive-Saver Copilot: dashboard and API in one container.
 #
-# The model is trained during the build, not at startup, so the image is
-# self contained and a cold start serves traffic immediately. The AI4I sample
-# ships in the repo rather than being fetched from UCI at build time, which
-# keeps builds hermetic: a deploy does not fail because an upstream host is down.
+# One image, one Cloud Run service, one URL. The dashboard is served by the same
+# process that serves the API, so the browser origin is always correct and there
+# is no CORS to configure between them. The cost is that a UI change redeploys
+# the whole service, which is the right trade for a prototype.
+#
+# The model is trained during the build, not at startup, so the image is self
+# contained and a cold start serves traffic immediately. The AI4I sample ships in
+# the repo rather than being fetched from UCI at build time, which keeps builds
+# hermetic: a deploy cannot fail because an upstream host is down.
 
+# ---------------------------------------------------------------- dashboard
+FROM node:22-slim AS dashboard
+
+WORKDIR /ui
+
+# Manifests first so source edits do not invalidate the npm install layer.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+RUN npm run build && test -f dist/index.html
+
+# ---------------------------------------------------------------------- api
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -36,6 +54,10 @@ COPY data/raw/ai4i2020.csv ./data/raw/ai4i2020.csv
 # Bake the trained model into the image. Fails the build if training fails,
 # which is what you want: a broken model should never reach a deploy.
 RUN python -m backend.ml.train && test -f models/drive_saver_model.joblib
+
+# The built dashboard. backend/api/static.py mounts this if it is present, so a
+# backend only checkout still runs the API without a node toolchain.
+COPY --from=dashboard /ui/dist ./frontend/dist
 
 RUN useradd --create-home --uid 10001 app && chown -R app:app /app
 USER app

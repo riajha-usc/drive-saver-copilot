@@ -18,6 +18,12 @@ test:
 api:
 	$(VENV)/bin/uvicorn backend.api.main:app --reload --port 8000
 
+ui:
+	cd frontend && npm install && npm run dev
+
+ui-build:
+	cd frontend && npm install && npm run build
+
 docker-build:
 	docker build -t drive-saver-copilot .
 
@@ -26,4 +32,4 @@ docker-run: docker-build
 
 all: train test demo
 
-.PHONY: setup train demo test api docker-build docker-run all
+.PHONY: setup train demo test api ui ui-build docker-build docker-run all

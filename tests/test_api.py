@@ -273,3 +273,61 @@ def test_openapi_documents_the_prescriptive_contract(client):
     ref = schema["paths"]["/recommendations"]["post"]["responses"]["200"]
     body = ref["content"]["application/json"]["schema"]
     assert body["$ref"].endswith("PrescriptiveRecommendation")
+
+
+# -------------------------------------------------------------- dashboard
+
+@pytest.fixture(scope="module")
+def built():
+    """A client for a checkout where the dashboard has actually been built."""
+    from backend.api.static import DIST_DIR
+    if not (DIST_DIR / "index.html").is_file():
+        pytest.skip("frontend not built; run npm run build in frontend/")
+    with TestClient(create_app()) as c:
+        yield c
+
+
+class TestDashboardServing:
+    """The dashboard and the API share one origin, so the mount must not eat
+    API routes and an API typo must not quietly return HTML."""
+
+    def test_root_serves_the_dashboard(self, built):
+        r = built.get("/")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "<div id=\"root\">" in r.text
+
+    def test_client_routes_fall_back_to_the_app_shell(self, built):
+        """A refresh on a client side route must not 404."""
+        for route in ("/assets/VFD-0001", "/upload", "/assets/VFD-0001/detail"):
+            r = built.get(route)
+            assert r.status_code == 200, route
+            assert "text/html" in r.headers["content-type"], route
+
+    def test_built_files_are_served(self, built):
+        """The hashed bundle the app shell references must actually resolve."""
+        import re
+        html = built.get("/").text
+        for ref in re.findall(r'(?:src|href)="(/static/[^"]+)"', html):
+            assert built.get(ref).status_code == 200, ref
+
+    def test_api_routes_are_not_shadowed(self, built):
+        assert built.get("/health").json()["status"] == "ok"
+        assert built.get("/model").status_code == 200
+        assert built.get(f"/datasets/{DEFAULT_DATASET_ID}").status_code == 200
+        assert built.get("/openapi.json").status_code == 200
+        assert built.get("/docs").status_code == 200
+
+    def test_a_wrong_api_path_still_404s_as_an_api_path(self, built):
+        """Returning the dashboard HTML for a mistyped endpoint would turn a
+        clear 404 into a confusing 200 full of markup."""
+        r = built.get("/datasets/ai4i-sample/assets/VFD-0001/recomendation")
+        assert r.status_code == 404
+        assert "text/html" not in r.headers.get("content-type", "")
+
+    def test_the_api_runs_without_a_built_dashboard(self, monkeypatch, tmp_path):
+        """Backend only checkouts and CI must not need a node build."""
+        monkeypatch.setattr("backend.api.static.DIST_DIR", tmp_path / "nothing")
+        with TestClient(create_app()) as c:
+            assert c.get("/health").json()["status"] == "ok"
+            assert c.get("/").status_code == 404

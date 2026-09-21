@@ -48,7 +48,7 @@ Simulates industrial machinery operating conditions and carries the exact VFD an
 | SHAP | Feature attribution to identify the specific failure driver (temperature vs torque) |
 | LangGraph + LLM (OpenAI / Anthropic) | Agentic reasoning, counterfactual simulation, structured JSON output |
 | FastAPI | REST endpoints for telemetry analysis and agent recommendations |
-| Streamlit or React / Next.js | Dashboard for telemetry charts, failure alerts, and prescriptive actions |
+| React + Vite | Dashboard for telemetry charts, failure alerts, and prescriptive actions. Builds to static files served by FastAPI from one origin |
 | Sample telemetry CSV | AI4I 2020, with NASA C-MAPSS or synthetic VFD telemetry as a fallback |
 
 ## Implementation Tasks
@@ -62,47 +62,10 @@ Simulates industrial machinery operating conditions and carries the exact VFD an
 
 ### Phase 2: Backend API Layer
 
-Complete. `uvicorn backend.api.main:app --reload`, docs at `/docs`.
+5. **FastAPI setup and ingestion endpoint.** Routes that accept telemetry uploads and return model predictions.
+6. **Prescriptive agent endpoint.** Trigger the LangGraph agent for a selected high-risk motor and serve the structured recommendation payload.
 
-The prescriptive payload is not redefined at the HTTP boundary. It is
-`PrescriptiveRecommendation` served unchanged, so the dashboard codes against one
-contract whether it reads it from the API or from `python -m backend.demo --json`.
-
-### Endpoints
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| GET | `/health` | liveness and whether a trained model is loaded |
-| GET | `/model` | features, thresholds, test metrics, the RUL proxy note |
-| POST | `/datasets` | Task 5: upload a telemetry CSV, get it cleaned, scored and held |
-| GET | `/datasets` | list loaded datasets |
-| GET | `/datasets/{id}` | dataset summary with risk band counts |
-| GET | `/datasets/{id}/assets` | asset selector feed, sorted by risk, filterable and paged |
-| GET | `/datasets/{id}/assets/{asset_id}` | risk, per mode probabilities, margins, SHAP factors |
-| GET | `/datasets/{id}/assets/{asset_id}/history` | telemetry trace for the charts |
-| POST | `/datasets/{id}/assets/{asset_id}/recommendation` | Task 6: run the agent, return the prescription |
-| POST | `/datasets/{id}/assets/{asset_id}/apply` | back the Implement Adjustment button |
-| POST | `/telemetry/score` | score rows inline, no upload, nothing retained |
-| POST | `/recommendations` | run the agent on inline telemetry, no upload |
-
-### Notes for the dashboard
-
-- The AI4I sample is seeded at startup as dataset `ai4i-sample`, so the UI never
-  opens to an empty asset list.
-- Uploads accept either column spelling the AI4I source ships with, bracketed
-  units or stripped. Unusable rows are dropped and counted in `rows_rejected`
-  rather than failing the whole upload.
-- A missing model does not stop the app booting. `/health` reports `degraded` and
-  the endpoints that need the model return 503 with the command to fix it.
-- `/apply` records the operator accepting a prescription and reports the resulting
-  operating point. It does not talk to a real drive and says so in
-  `applied_note`. Do not render it as a confirmation that a setpoint changed.
-- The history endpoint carries a `note` saying that AI4I rows are independent
-  snapshots rather than one machine over time. Keep that note visible near the
-  chart.
-- CORS is open to localhost on ports 3000, 5173 and 8501.
-
-## Phase 3: Dashboard UI
+### Phase 3: Dashboard UI
 
 7. **Telemetry and failure alert interface.** Asset selector, telemetry line charts for temperature, RPM, and torque, plus a prominent red alert box showing health status.
 8. **Prescriptive recommendation panel.** An interactive card showing the prescribed parameter change, projected RUL extension in hours, estimated cost savings, and an "Implement Adjustment" button.
@@ -134,7 +97,11 @@ drive-saver-copilot/
       schemas.py         request and response models for the HTTP layer
       deps.py            shared dependencies and error translation
       routers/           meta, telemetry ingestion, assets, recommendations
+      static.py          serves the built dashboard from the same origin
     demo.py              runnable Phase 1 walkthrough
+  frontend/              React and Vite dashboard, built into the API image
+    src/api.js           client for every endpoint, relative paths, no CORS
+    src/App.jsx          scaffold status page; tasks 7 to 9 not built
   tests/                 93 tests, including a whole pipeline regression harness
   data/raw/              cached AI4I CSV
   models/                trained bundle and metrics.json
@@ -156,6 +123,7 @@ make train      # fetches AI4I from UCI on first run, trains, writes models/
 make test       # 93 tests
 make demo       # one prescriptive card per failure mode, on real dataset rows
 make api        # serve the API at http://127.0.0.1:8000, docs at /docs
+make ui         # dashboard dev server at http://127.0.0.1:5173, proxied to the API
 ```
 
 `make demo --json` is available as `python -m backend.demo --json` and prints the
@@ -281,20 +249,67 @@ VFD-MOTOR-03   CRITICAL   99.9 percent risk of Power Failure
 
 ## Phase 2: Backend API Layer
 
-Code completed and testing not started. Planned endpoints, both serving the schema above unchanged:
+Complete. `uvicorn backend.api.main:app --reload`, docs at `/docs`.
 
-5. **Ingestion.** `POST /telemetry` accepts a CSV upload or a JSON batch, returns
-   per row risk, RUL proxy and likely mode from `score_frame`.
-6. **Prescription.** `POST /assets/{asset_id}/recommendation` runs the LangGraph
-   agent for one operating point and a maintenance window, returns
-   `PrescriptiveRecommendation`.
+The prescriptive payload is not redefined at the HTTP boundary. It is
+`PrescriptiveRecommendation` served unchanged, so the dashboard codes against one
+contract whether it reads it from the API or from `python -m backend.demo --json`.
+
+### Endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/health` | liveness and whether a trained model is loaded |
+| GET | `/model` | features, thresholds, test metrics, the RUL proxy note |
+| POST | `/datasets` | Task 5: upload a telemetry CSV, get it cleaned, scored and held |
+| GET | `/datasets` | list loaded datasets |
+| GET | `/datasets/{id}` | dataset summary with risk band counts |
+| GET | `/datasets/{id}/assets` | asset selector feed, sorted by risk, filterable and paged |
+| GET | `/datasets/{id}/assets/{asset_id}` | risk, per mode probabilities, margins, SHAP factors |
+| GET | `/datasets/{id}/assets/{asset_id}/history` | telemetry trace for the charts |
+| POST | `/datasets/{id}/assets/{asset_id}/recommendation` | Task 6: run the agent, return the prescription |
+| POST | `/datasets/{id}/assets/{asset_id}/apply` | back the Implement Adjustment button |
+| POST | `/telemetry/score` | score rows inline, no upload, nothing retained |
+| POST | `/recommendations` | run the agent on inline telemetry, no upload |
+
+### Notes for the dashboard
+
+- The AI4I sample is seeded at startup as dataset `ai4i-sample`, so the UI never
+  opens to an empty asset list.
+- Uploads accept either column spelling the AI4I source ships with, bracketed
+  units or stripped. Unusable rows are dropped and counted in `rows_rejected`
+  rather than failing the whole upload.
+- A missing model does not stop the app booting. `/health` reports `degraded` and
+  the endpoints that need the model return 503 with the command to fix it.
+- `/apply` records the operator accepting a prescription and reports the resulting
+  operating point. It does not talk to a real drive and says so in
+  `applied_note`. Do not render it as a confirmation that a setpoint changed.
+- The history endpoint carries a `note` saying that AI4I rows are independent
+  snapshots rather than one machine over time. Keep that note visible near the
+  chart.
+- The dashboard is served from this same app at `/`, so calls use relative
+  paths and CORS does not apply. `DSC_CORS_ORIGINS` is only for callers on
+  another origin.
 
 ## Phase 3: Dashboard UI
 
-Not Started. The contract is `PrescriptiveRecommendation`, served by
-the endpoints above. Start the API with `make api` and browse `/docs` for a live,
-executable reference. `python -m backend.demo --json` still prints example
-payloads if you want them without a running server.
+Not started. Tasks 7, 8 and 9 are yet to be completed.
+
+What is in place for them:
+
+- `frontend/` is a React and Vite scaffold that builds and deploys. It currently
+  renders a status page against the live API, nothing more.
+- `frontend/src/api.js` wraps every endpoint already. Calls use relative paths
+  because the dashboard and the API are served from one origin, so there is no
+  base URL to configure and no CORS to negotiate.
+- The contract is `PrescriptiveRecommendation`. Browse `/docs` on a running API
+  for a live, executable reference, or run `python -m backend.demo --json` for
+  example payloads with no server.
+
+```bash
+make api        # terminal one, API on :8000
+make ui         # terminal two, dashboard on :5173, proxied to the API
+```
 
 ## Deployment
 
@@ -305,37 +320,42 @@ UCI at build time, which keeps builds hermetic: a deploy cannot fail because an
 upstream host is down.
 
 ```bash
-make docker-build       # builds and trains, about two minutes cold
-make docker-run         # serves on http://127.0.0.1:8000
+make docker-build       # builds the dashboard, trains the model, about three minutes cold
+make docker-run         # dashboard and API together on http://127.0.0.1:8000
 ```
 
-Verified locally: image builds, trains, boots, serves `/health`, the seeded
-sample, the asset list and the agent, and honours `DSC_CORS_ORIGINS`.
+Verified against the real image: the dashboard renders at `/` against live API
+data, the built bundle resolves, client side routes fall back to the app shell,
+and a mistyped API path still returns a 404 rather than quietly serving HTML.
 
-### The UI and the API need two different URLs
+### One deployment, one URL
 
-They are different kinds of workload and do not deploy to the same place.
+The dashboard and the API ship in the same image and are served by the same
+process. The React app builds to static files in a Node stage, those files land
+next to the API, and FastAPI serves them at `/` while the API keeps its own
+paths.
 
-| Piece | Host | Why |
-| --- | --- | --- |
-| Dashboard | Vercel | static or edge rendered, free, always on |
-| API | Google Cloud Run | long running container, ~1.2 GB image, holds a model in memory |
+That means the browser origin is already correct for every call the dashboard
+makes, so there is no API base URL to configure and no CORS to negotiate. It
+also means one thing to deploy, one URL to demo and one container to keep warm.
 
-Vercel will not host this backend. Its Python functions are serverless and size
+The cost is that a UI change rebuilds the whole image, roughly three minutes.
+For a prototype that is a good trade against debugging a cross origin failure
+under time pressure. Splitting them later is a Dockerfile change and a base URL
+in `frontend/src/api.js`, nothing deeper.
+
+`DSC_CORS_ORIGINS` still exists for the case where something else calls the API
+from another origin. In the single deployment it is not needed.
+
+Vercel cannot host this backend. Its Python functions are serverless and size
 capped, and this service carries XGBoost, SHAP, numba and LangGraph, which is
 well past that ceiling. Serverless is also stateless, so the in memory telemetry
-store would lose uploads between requests. Put the dashboard on Vercel and point
-it at the container URL.
+store would lose uploads between requests.
 
-The dashboard reads the API base URL from an environment variable, for example
-`NEXT_PUBLIC_API_URL=https://drive-saver-copilot-api-xxxxx.run.app`, and the API
-must list the dashboard's origin in `DSC_CORS_ORIGINS` or the browser blocks
-every call.
-
-GitHub cannot host the API. It builds and stores images perfectly well, through
-Actions and ghcr.io, but it does not run a long lived process behind a stable
-URL. Pages is static only and Actions jobs terminate. The build and the runtime
-are separate jobs and only the build is GitHub's.
+GitHub cannot host it either. It builds and stores images perfectly well,
+through Actions and ghcr.io, but it does not run a long lived process behind a
+stable URL: Pages is static only and Actions jobs terminate. Building and
+running are separate jobs and only building is GitHub's.
 
 ### Google Cloud Run (the deployment target)
 
@@ -353,9 +373,13 @@ gcloud run deploy drive-saver-copilot-api \
   --memory 2Gi \
   --cpu 1 \
   --min-instances 1 \
-  --max-instances 1 \
-  --set-env-vars DSC_CORS_ORIGINS=https://your-dashboard.vercel.app
+  --max-instances 1
 ```
+
+The URL it prints serves the dashboard at `/` and the API underneath it. Nothing
+builds or runs on a local machine: Cloud Build builds the image on Google's
+infrastructure and Cloud Run runs it there, so the URL answers whether or not
+your laptop is on.
 
 `--max-instances 1` is not optional. Cloud Run autoscales by default, and the
 telemetry store lives in process: a second instance would not see the first
@@ -380,7 +404,7 @@ wake, so either keep the paid starter instance or ping `/health` on a schedule.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | 8000 | injected by most platforms |
-| `DSC_CORS_ORIGINS` | localhost dev ports | comma separated dashboard origins |
+| `DSC_CORS_ORIGINS` | localhost dev ports | only needed for callers on another origin |
 | `DSC_SEED_SAMPLE` | 1 | seed the AI4I sample at startup, 0 to serve uploads only |
 | `ANTHROPIC_API_KEY` | unset | optional; without it the deterministic narrator runs |
 | `DSC_*_COST_*` | see `.env.example` | the four cost model constants |
