@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from backend import config
 from backend.api.routers import assets, meta, recommendations, telemetry
 from backend.api.store import store
 from backend.ml.predict import ModelNotTrained, load_bundle
@@ -44,20 +45,16 @@ Typical dashboard flow:
 Remaining useful life is a proxy throughout. See `GET /model` for the note.
 """
 
-# Local dev origins for the dashboard. Tighten before this goes anywhere real.
-ALLOWED_ORIGINS = [
-    "http://localhost:3000", "http://127.0.0.1:3000",      # Next.js
-    "http://localhost:5173", "http://127.0.0.1:5173",      # Vite
-    "http://localhost:8501", "http://127.0.0.1:8501",      # Streamlit
-]
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         load_bundle()
-        store.seed_default()
-        log.info("model loaded, AI4I sample seeded")
+        if config.SEED_SAMPLE_DATASET:
+            store.seed_default()
+            log.info("model loaded, AI4I sample seeded")
+        else:
+            log.info("model loaded, sample seeding disabled")
     except ModelNotTrained:
         # Starting without a model is fine. /health says so and says how to fix it.
         log.warning("no trained model found, API starts degraded. "
@@ -74,7 +71,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=ALLOWED_ORIGINS,
+        allow_origins=config.CORS_ORIGINS,
         allow_credentials=False,
         allow_methods=["GET", "POST"],
         allow_headers=["*"])

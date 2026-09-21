@@ -35,6 +35,22 @@ DOWNTIME_COST_PER_HOUR = float(os.getenv("DSC_DOWNTIME_COST_PER_HOUR", "1800"))
 EMERGENCY_CALLOUT_COST = float(os.getenv("DSC_EMERGENCY_CALLOUT_COST", "2500"))
 PRODUCTION_VALUE_PER_HOUR = float(os.getenv("DSC_PRODUCTION_VALUE_PER_HOUR", "950"))
 
+# Serving. PORT is what most platforms inject, so it is read rather than fixed.
+# CORS origins are comma separated; the default covers local dashboard dev and
+# has to be set explicitly once a real frontend has a domain.
+PORT = int(os.getenv("PORT", "8000"))
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:3000,http://127.0.0.1:3000,"      # Next.js
+    "http://localhost:5173,http://127.0.0.1:5173,"      # Vite
+    "http://localhost:8501,http://127.0.0.1:8501"       # Streamlit
+)
+CORS_ORIGINS = [o.strip() for o in
+                os.getenv("DSC_CORS_ORIGINS", DEFAULT_CORS_ORIGINS).split(",") if o.strip()]
+
+# Seeding the bundled AI4I sample costs a few seconds of startup and about 10,000
+# scored rows of memory. Turn it off on a deployment that only serves uploads.
+SEED_SAMPLE_DATASET = os.getenv("DSC_SEED_SAMPLE", "1").lower() not in ("0", "false", "no")
+
 # LLM narration. When no key is present the agent falls back to a deterministic
 # narrator so the prototype runs fully offline.
 LLM_MODEL = os.getenv("DSC_LLM_MODEL", "claude-sonnet-5")

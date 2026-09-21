@@ -3,5 +3,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .env
+# The AI4I sample is tracked so builds and deploys are hermetic.
 data/raw/*.csv
+!data/raw/ai4i2020.csv
 models/*.joblib

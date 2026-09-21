@@ -1,4 +1,4 @@
-# Phase 1: ML, explainability and the agent. Phase 2: the HTTP layer.
+# Runtime dependencies. Dev and test extras live in requirements-dev.txt.
 ucimlrepo==0.0.7
 pandas==3.0.6
 numpy==2.5.3
@@ -13,5 +13,3 @@ langchain-anthropic==1.7.2
 fastapi==0.141.1
 uvicorn[standard]==0.53.0
 python-multipart==0.0.32
-pytest==9.1.1
-httpx==0.28.1

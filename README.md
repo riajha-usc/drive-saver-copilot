@@ -296,6 +296,73 @@ the endpoints above. Start the API with `make api` and browse `/docs` for a live
 executable reference. `python -m backend.demo --json` still prints example
 payloads if you want them without a running server.
 
+## Deployment
+
+The API ships as a container. The model is trained during the build rather than
+at startup, so the image is self contained and a cold start serves traffic
+immediately. The AI4I sample is committed to the repo rather than fetched from
+UCI at build time, which keeps builds hermetic: a deploy cannot fail because an
+upstream host is down.
+
+```bash
+make docker-build       # builds and trains, about two minutes cold
+make docker-run         # serves on http://127.0.0.1:8000
+```
+
+Verified locally: image builds, trains, boots, serves `/health`, the seeded
+sample, the asset list and the agent, and honours `DSC_CORS_ORIGINS`.
+
+### The UI and the API need two different URLs
+
+They are different kinds of workload and do not deploy to the same place.
+
+| Piece | Host | Why |
+| --- | --- | --- |
+| Dashboard | Vercel, Netlify, Cloudflare Pages | static or edge rendered, free, always on |
+| API | Render, Railway, Fly.io, Cloud Run | long running container, ~1.2 GB image, holds a model in memory |
+
+Vercel will not host this backend. Its Python functions are serverless and size
+capped, and this service carries XGBoost, SHAP, numba and LangGraph, which is
+well past that ceiling. Serverless is also stateless, so the in memory telemetry
+store would lose uploads between requests. Put the dashboard on Vercel and point
+it at the container URL.
+
+The dashboard reads the API base URL from an environment variable, for example
+`NEXT_PUBLIC_API_URL=https://drive-saver-copilot-api.onrender.com`, and the API
+must list the dashboard's origin in `DSC_CORS_ORIGINS` or the browser blocks
+every call.
+
+### Render
+
+`render.yaml` is a working blueprint. Connect the repo, pick Blueprint, then set
+`DSC_CORS_ORIGINS` to the dashboard origin once it exists.
+
+The free tier sleeps after about 15 minutes idle and this image takes roughly a
+minute to wake, which is a poor first impression for anyone opening a demo link
+cold. Either keep the paid starter instance, or ping `/health` on a schedule to
+keep it warm.
+
+### Environment
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | 8000 | injected by most platforms |
+| `DSC_CORS_ORIGINS` | localhost dev ports | comma separated dashboard origins |
+| `DSC_SEED_SAMPLE` | 1 | seed the AI4I sample at startup, 0 to serve uploads only |
+| `ANTHROPIC_API_KEY` | unset | optional; without it the deterministic narrator runs |
+| `DSC_*_COST_*` | see `.env.example` | the four cost model constants |
+
+### Constraints to respect
+
+- **Run one instance.** The telemetry store is in process, so a second replica
+  would not see the first one's uploads. Scale out only after that store moves to
+  a database.
+- **Uploads do not survive a restart or redeploy.** The seeded AI4I sample always
+  works because it is baked into the image, so a demo link stays useful without
+  anyone uploading anything. Do not promise upload persistence.
+- **No secrets are required to run.** The agent narrates deterministically with no
+  API key, so a deployed demo works even if the key is missing or rate limited.
+
 ## Testing
 
 93 tests. The unit modules pin one behaviour each against a hand built operating
