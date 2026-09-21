@@ -157,6 +157,20 @@ def test_batch_scoring_agrees_with_single_point_scoring(bundle, failing_rows):
         assert batch.iloc[i]["p_machine_failure"] == pytest.approx(
             single.failure_probability, abs=1e-6)
         assert batch.iloc[i]["rul_hours"] == pytest.approx(single.rul_hours, abs=0.05)
+        # The band must match too: the asset list and the asset detail are the
+        # same number to an operator, and they come from these two paths.
+        assert batch.iloc[i]["risk_band"] == single.risk_band
+        assert bool(batch.iloc[i]["rule_violated"]) == bool(single.rule_violations)
+        assert batch.iloc[i]["likely_mode"] == single.likely_mode
+
+
+def test_batch_scoring_names_no_mode_on_healthy_rows(bundle, healthy_rows):
+    points = [_point(r) for r in healthy_rows]
+    batch = score_frame(frame_from_records(points), bundle=bundle)
+    healthy = batch[batch["risk_band"] == "normal"]
+    assert not healthy.empty
+    assert (healthy["likely_mode"] == "none").all(), \
+        "an asset list must not name a failure mode on a healthy machine"
 
 
 def test_the_agent_is_deterministic(bundle, overstrain_point):

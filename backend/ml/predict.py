@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 
 import joblib
+import numpy as np
 import pandas as pd
 
 from backend import config, physics
@@ -67,6 +68,22 @@ class Prediction:
         }
 
 
+def _violation_masks(X: pd.DataFrame) -> pd.DataFrame:
+    """Vectorised form of physics.rule_failures, one boolean column per mode.
+
+    Uses the same constants as the scalar rules so the two cannot drift apart.
+    """
+    return pd.DataFrame({
+        "PWF": (X["power_w"] < physics.PWF_POWER_MIN_W)
+               | (X["power_w"] > physics.PWF_POWER_MAX_W),
+        "HDF": (X["temp_diff"] < physics.HDF_TEMP_DIFF_MIN_K)
+               & (X["rotational_speed"] < physics.HDF_SPEED_MIN_RPM),
+        "OSF": X["osf_utilisation"] > 1.0,
+        "TWF": (X["tool_wear"] >= physics.TWF_WEAR_MIN_MIN)
+               & (X["tool_wear"] <= physics.TWF_WEAR_MAX_MIN),
+    }, index=X.index)
+
+
 def score_frame(X: pd.DataFrame, bundle=None) -> pd.DataFrame:
     """Batch scoring. Returns probabilities, RUL proxy and risk band per row."""
     bundle = bundle or load_bundle()
@@ -74,10 +91,24 @@ def score_frame(X: pd.DataFrame, bundle=None) -> pd.DataFrame:
     out = pd.DataFrame(index=X.index)
     for head, model in bundle.models.items():
         out[f"p_{head}"] = model.predict_proba(X)[:, 1]
-    out["risk_band"] = out["p_machine_failure"].map(risk_band)
+    # Everything below mirrors predict() exactly. An asset list and an asset
+    # detail are the same number to an operator, so these two paths must not
+    # disagree about the band or the named mechanism.
+    masks = _violation_masks(X)
+    any_violated = masks.any(axis=1)
+    out["risk_band"] = [risk_band(p, ("violation",) if v else ())
+                        for p, v in zip(out["p_machine_failure"], any_violated)]
+    out["rule_violated"] = any_violated.to_numpy()
     out["rul_hours"] = out["p_machine_failure"].map(probability_to_rul_hours)
-    mode_cols = [f"p_{m}" for m in FAILURE_MODES if f"p_{m}" in out.columns]
-    out["likely_mode"] = out[mode_cols].idxmax(axis=1).str.removeprefix("p_")
+
+    modes = [m for m in FAILURE_MODES if f"p_{m}" in out.columns]
+    probs = out[[f"p_{m}" for m in modes]].set_axis(modes, axis=1)
+    # A breached limit names the mechanism; otherwise the strongest head does,
+    # and a healthy asset names none at all.
+    violated_pick = probs.where(masks[modes], -1.0).idxmax(axis=1)
+    out["likely_mode"] = np.where(
+        any_violated, violated_pick,
+        np.where(out["risk_band"] == "normal", "none", probs.idxmax(axis=1)))
     return out
 
 
