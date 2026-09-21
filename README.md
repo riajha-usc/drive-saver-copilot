@@ -62,10 +62,47 @@ Simulates industrial machinery operating conditions and carries the exact VFD an
 
 ### Phase 2: Backend API Layer
 
-5. **FastAPI setup and ingestion endpoint.** Routes that accept telemetry uploads and return model predictions.
-6. **Prescriptive agent endpoint.** Trigger the LangGraph agent for a selected high-risk motor and serve the structured recommendation payload.
+Complete. `uvicorn backend.api.main:app --reload`, docs at `/docs`.
 
-### Phase 3: Dashboard UI
+The prescriptive payload is not redefined at the HTTP boundary. It is
+`PrescriptiveRecommendation` served unchanged, so the dashboard codes against one
+contract whether it reads it from the API or from `python -m backend.demo --json`.
+
+### Endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/health` | liveness and whether a trained model is loaded |
+| GET | `/model` | features, thresholds, test metrics, the RUL proxy note |
+| POST | `/datasets` | Task 5: upload a telemetry CSV, get it cleaned, scored and held |
+| GET | `/datasets` | list loaded datasets |
+| GET | `/datasets/{id}` | dataset summary with risk band counts |
+| GET | `/datasets/{id}/assets` | asset selector feed, sorted by risk, filterable and paged |
+| GET | `/datasets/{id}/assets/{asset_id}` | risk, per mode probabilities, margins, SHAP factors |
+| GET | `/datasets/{id}/assets/{asset_id}/history` | telemetry trace for the charts |
+| POST | `/datasets/{id}/assets/{asset_id}/recommendation` | Task 6: run the agent, return the prescription |
+| POST | `/datasets/{id}/assets/{asset_id}/apply` | back the Implement Adjustment button |
+| POST | `/telemetry/score` | score rows inline, no upload, nothing retained |
+| POST | `/recommendations` | run the agent on inline telemetry, no upload |
+
+### Notes for the dashboard
+
+- The AI4I sample is seeded at startup as dataset `ai4i-sample`, so the UI never
+  opens to an empty asset list.
+- Uploads accept either column spelling the AI4I source ships with, bracketed
+  units or stripped. Unusable rows are dropped and counted in `rows_rejected`
+  rather than failing the whole upload.
+- A missing model does not stop the app booting. `/health` reports `degraded` and
+  the endpoints that need the model return 503 with the command to fix it.
+- `/apply` records the operator accepting a prescription and reports the resulting
+  operating point. It does not talk to a real drive and says so in
+  `applied_note`. Do not render it as a confirmation that a setpoint changed.
+- The history endpoint carries a `note` saying that AI4I rows are independent
+  snapshots rather than one machine over time. Keep that note visible near the
+  chart.
+- CORS is open to localhost on ports 3000, 5173 and 8501.
+
+## Phase 3: Dashboard UI
 
 7. **Telemetry and failure alert interface.** Asset selector, telemetry line charts for temperature, RPM, and torque, plus a prominent red alert box showing health status.
 8. **Prescriptive recommendation panel.** An interactive card showing the prescribed parameter change, projected RUL extension in hours, estimated cost savings, and an "Implement Adjustment" button.
@@ -91,8 +128,14 @@ drive-saver-copilot/
       llm.py             narration, LLM optional with a deterministic fallback
       graph.py           Task 3   the LangGraph state machine
       schema.py          Task 4   the strict Pydantic output contract
+    api/
+      main.py            Task 5   FastAPI app, CORS, startup model load
+      store.py           in memory dataset registry, seeded with the AI4I sample
+      schemas.py         request and response models for the HTTP layer
+      deps.py            shared dependencies and error translation
+      routers/           meta, telemetry ingestion, assets, recommendations
     demo.py              runnable Phase 1 walkthrough
-  tests/                 67 tests, including a whole pipeline regression harness
+  tests/                 93 tests, including a whole pipeline regression harness
   data/raw/              cached AI4I CSV
   models/                trained bundle and metrics.json
 ```
@@ -110,8 +153,9 @@ Then:
 ```bash
 make setup      # venv plus requirements
 make train      # fetches AI4I from UCI on first run, trains, writes models/
-make test       # 67 tests
+make test       # 93 tests
 make demo       # one prescriptive card per failure mode, on real dataset rows
+make api        # serve the API at http://127.0.0.1:8000, docs at /docs
 ```
 
 `make demo --json` is available as `python -m backend.demo --json` and prints the
@@ -247,13 +291,14 @@ Not started. Planned endpoints, both serving the schema above unchanged:
 
 ## Phase 3: Dashboard UI
 
-Owned by the UI teammate. The contract is `PrescriptiveRecommendation`. Run
-`python -m backend.demo --json` for live example payloads to build against before
-the API exists.
+Owned by the UI teammate. The contract is `PrescriptiveRecommendation`, served by
+the endpoints above. Start the API with `make api` and browse `/docs` for a live,
+executable reference. `python -m backend.demo --json` still prints example
+payloads if you want them without a running server.
 
 ## Testing
 
-67 tests. The unit modules pin one behaviour each against a hand built operating
+93 tests. The unit modules pin one behaviour each against a hand built operating
 point. `tests/test_integration.py` runs sampled real rows through the full graph
 and asserts the invariants that must hold for every row rather than only the ones
 someone wrote a fixture for:

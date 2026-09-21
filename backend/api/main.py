@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api.routers import meta, telemetry
+from backend.api.routers import assets, meta, recommendations, telemetry
 from backend.api.store import store
 from backend.ml.predict import ModelNotTrained, load_bundle
 
@@ -36,6 +36,10 @@ Typical dashboard flow:
 1. `GET /health` and `GET /model` on load
 2. `POST /datasets` to upload a telemetry CSV, or use the seeded `ai4i-sample`
 3. `GET /datasets/{id}/assets?sort=risk` for the asset selector
+4. `GET /datasets/{id}/assets/{asset_id}` and `.../history` for the alert box
+   and the charts
+5. `POST /datasets/{id}/assets/{asset_id}/recommendation` for the prescription
+6. `POST .../apply` behind the Implement Adjustment button
 
 Remaining useful life is a proxy throughout. See `GET /model` for the note.
 """
@@ -77,6 +81,8 @@ def create_app() -> FastAPI:
 
     app.include_router(meta.router)
     app.include_router(telemetry.router)
+    app.include_router(assets.router)
+    app.include_router(recommendations.router)
     return app
 
 

@@ -129,3 +129,147 @@ def test_inline_scoring_validates_physics(client):
         {"type": "M", "air_temperature": 298.1, "process_temperature": 308.6,
          "rotational_speed": 0, "torque": 42.8, "tool_wear": 20}]})
     assert r.status_code == 422
+
+
+# ------------------------------------------------------------------- assets
+
+def test_asset_list_leads_with_the_riskiest(client):
+    body = client.get(f"/datasets/{DEFAULT_DATASET_ID}/assets",
+                      params={"limit": 20}).json()
+    probs = [a["failure_probability"] for a in body["assets"]]
+    assert probs == sorted(probs, reverse=True)
+    assert body["assets"][0]["risk_band"] == "critical"
+
+
+def test_asset_list_filters_by_band_and_risk_floor(client):
+    body = client.get(f"/datasets/{DEFAULT_DATASET_ID}/assets",
+                      params={"band": "critical", "limit": 200}).json()
+    assert body["total"] > 0
+    assert all(a["risk_band"] == "critical" for a in body["assets"])
+
+    floored = client.get(f"/datasets/{DEFAULT_DATASET_ID}/assets",
+                         params={"min_risk": 0.9, "limit": 200}).json()
+    assert all(a["failure_probability"] >= 0.9 for a in floored["assets"])
+
+
+def test_asset_list_pages(client):
+    q = {"limit": 5, "offset": 0}
+    first = client.get(f"/datasets/{DEFAULT_DATASET_ID}/assets", params=q).json()
+    second = client.get(f"/datasets/{DEFAULT_DATASET_ID}/assets",
+                        params={"limit": 5, "offset": 5}).json()
+    assert first["returned"] == second["returned"] == 5
+    assert {a["asset_id"] for a in first["assets"]}.isdisjoint(
+        {a["asset_id"] for a in second["assets"]})
+
+
+def test_asset_detail_carries_margins_and_shap_factors(client, sample_csv):
+    ds_id = _upload(client, sample_csv).json()["dataset_id"]
+    body = client.get(f"/datasets/{ds_id}/assets/VFD-0001").json()
+    assert body["asset"]["risk_band"] == "critical"
+    assert body["likely_failure_mode_name"] == "Overstrain Failure"
+    assert {m["mode"] for m in body["margins"]} == {"PWF", "HDF", "OSF", "TWF"}
+    assert any(m["violated"] for m in body["margins"])
+    assert body["factors"] and body["factors"][0]["share_of_risk"] >= 0
+
+
+def test_asset_history_returns_a_plottable_trace(client):
+    body = client.get(f"/datasets/{DEFAULT_DATASET_ID}/assets/VFD-0100/history",
+                      params={"window": 30}).json()
+    assert body["window"] == 30
+    assert body["points"][-1]["asset_id"] == "VFD-0100"
+    assert [p["row_index"] for p in body["points"]] == list(range(71, 101))
+    # The note has to travel with the data: these rows are not one machine's run.
+    assert "not a time series" in body["note"]
+
+
+def test_history_clamps_at_the_start_of_the_dataset(client):
+    body = client.get(f"/datasets/{DEFAULT_DATASET_ID}/assets/VFD-0002/history",
+                      params={"window": 60}).json()
+    assert body["window"] == 3
+    assert body["points"][0]["row_index"] == 0
+
+
+def test_unknown_dataset_and_asset_give_actionable_404s(client):
+    r = client.get("/datasets/nope/assets")
+    assert r.status_code == 404 and "Upload one" in r.json()["detail"]
+
+    r = client.get(f"/datasets/{DEFAULT_DATASET_ID}/assets/NOT-AN-ASSET")
+    assert r.status_code == 404 and "VFD-0000" in r.json()["detail"]
+
+
+# ----------------------------------------------------------- prescriptions
+
+def test_recommendation_serves_the_agent_contract_unchanged(client, sample_csv):
+    ds_id = _upload(client, sample_csv).json()["dataset_id"]
+    r = client.post(f"/datasets/{ds_id}/assets/VFD-0001/recommendation",
+                    params={"hours_to_window": 48})
+    assert r.status_code == 200
+    rec = PrescriptiveRecommendation.model_validate(r.json())
+    assert rec.asset_id == "VFD-0001"
+    assert rec.risk.likely_failure_mode == "OSF"
+    assert rec.adjustments
+    assert rec.projection.reaches_maintenance_window
+    assert rec.narrative.headline
+
+
+def test_recommendation_honours_the_maintenance_window(client, sample_csv):
+    ds_id = _upload(client, sample_csv).json()["dataset_id"]
+    tight = client.post(f"/datasets/{ds_id}/assets/VFD-0002/recommendation",
+                        params={"hours_to_window": 24}).json()
+    wide = client.post(f"/datasets/{ds_id}/assets/VFD-0002/recommendation",
+                       params={"hours_to_window": 200}).json()
+    assert tight["projection"]["hours_to_maintenance_window"] == 24
+    assert (wide["projection"]["projected_rul_hours"]
+            >= tight["projection"]["projected_rul_hours"])
+
+
+def test_recommendation_rejects_a_nonsense_window(client, sample_csv):
+    ds_id = _upload(client, sample_csv).json()["dataset_id"]
+    r = client.post(f"/datasets/{ds_id}/assets/VFD-0000/recommendation",
+                    params={"hours_to_window": -5})
+    assert r.status_code == 422
+
+
+def test_healthy_asset_returns_no_action(client, sample_csv):
+    ds_id = _upload(client, sample_csv).json()["dataset_id"]
+    rec = client.post(f"/datasets/{ds_id}/assets/VFD-0000/recommendation").json()
+    assert rec["action_type"] == "no_action"
+    assert rec["adjustments"] == []
+
+
+def test_ad_hoc_recommendation_needs_no_dataset(client):
+    r = client.post("/recommendations", json={
+        "asset_id": "LINE-3-EXTRUDER",
+        "hours_to_window": 48,
+        "telemetry": {"type": "L", "air_temperature": 302.0,
+                      "process_temperature": 310.0, "rotational_speed": 1345,
+                      "torque": 42.0, "tool_wear": 110}})
+    rec = PrescriptiveRecommendation.model_validate(r.json())
+    assert rec.asset_id == "LINE-3-EXTRUDER"
+    assert rec.risk.likely_failure_mode == "HDF"
+    # The heat fix is to speed up, not throttle.
+    speed = [a for a in rec.adjustments if a.parameter == "rotational_speed"]
+    assert speed and speed[0].change_pct > 0
+
+
+def test_apply_reports_the_adjusted_point_without_claiming_to_have_written_it(
+        client, sample_csv):
+    ds_id = _upload(client, sample_csv).json()["dataset_id"]
+    body = client.post(f"/datasets/{ds_id}/assets/VFD-0002/apply",
+                       json={"hours_to_window": 48}).json()
+    assert body["applied"] is False
+    assert "no connection to a VFD" in body["applied_note"]
+    assert body["adjustments"]
+    assert body["failure_probability_after"] < body["failure_probability_before"]
+    assert body["rul_hours_after"] >= body["rul_hours_before"]
+    assert body["after"]["shaft_power_w"] != body["before"]["shaft_power_w"]
+
+
+# ------------------------------------------------------------------ contract
+
+def test_openapi_documents_the_prescriptive_contract(client):
+    schema = client.get("/openapi.json").json()
+    assert "PrescriptiveRecommendation" in schema["components"]["schemas"]
+    ref = schema["paths"]["/recommendations"]["post"]["responses"]["200"]
+    body = ref["content"]["application/json"]["schema"]
+    assert body["$ref"].endswith("PrescriptiveRecommendation")
