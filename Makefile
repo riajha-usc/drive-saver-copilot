@@ -15,6 +15,9 @@ demo:
 test:
 	$(PY) -m pytest tests/ -q
 
+api:
+	$(VENV)/bin/uvicorn backend.api.main:app --reload --port 8000
+
 all: train test demo
 
-.PHONY: setup train demo test all
+.PHONY: setup train demo test api all

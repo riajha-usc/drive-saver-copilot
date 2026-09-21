@@ -1,4 +1,4 @@
-# Phase 1: ML, explainability and the agent. Phase 2 adds FastAPI on top.
+# Phase 1: ML, explainability and the agent. Phase 2: the HTTP layer.
 ucimlrepo==0.0.7
 pandas==3.0.6
 numpy==2.5.3
@@ -10,4 +10,8 @@ pydantic==2.13.5
 pydantic-settings==2.15.0
 langgraph==1.2.11
 langchain-anthropic==1.7.2
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+python-multipart==0.0.32
 pytest==9.1.1
+httpx==0.28.1
