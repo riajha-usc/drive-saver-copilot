@@ -318,8 +318,8 @@ They are different kinds of workload and do not deploy to the same place.
 
 | Piece | Host | Why |
 | --- | --- | --- |
-| Dashboard | Vercel, Netlify, Cloudflare Pages | static or edge rendered, free, always on |
-| API | Render, Railway, Fly.io, Cloud Run | long running container, ~1.2 GB image, holds a model in memory |
+| Dashboard | Vercel | static or edge rendered, free, always on |
+| API | Google Cloud Run | long running container, ~1.2 GB image, holds a model in memory |
 
 Vercel will not host this backend. Its Python functions are serverless and size
 capped, and this service carries XGBoost, SHAP, numba and LangGraph, which is
@@ -328,19 +328,52 @@ store would lose uploads between requests. Put the dashboard on Vercel and point
 it at the container URL.
 
 The dashboard reads the API base URL from an environment variable, for example
-`NEXT_PUBLIC_API_URL=https://drive-saver-copilot-api.onrender.com`, and the API
+`NEXT_PUBLIC_API_URL=https://drive-saver-copilot-api-xxxxx.run.app`, and the API
 must list the dashboard's origin in `DSC_CORS_ORIGINS` or the browser blocks
 every call.
 
-### Render
+GitHub cannot host the API. It builds and stores images perfectly well, through
+Actions and ghcr.io, but it does not run a long lived process behind a stable
+URL. Pages is static only and Actions jobs terminate. The build and the runtime
+are separate jobs and only the build is GitHub's.
 
-`render.yaml` is a working blueprint. Connect the repo, pick Blueprint, then set
-`DSC_CORS_ORIGINS` to the dashboard origin once it exists.
+### Google Cloud Run (the deployment target)
 
-The free tier sleeps after about 15 minutes idle and this image takes roughly a
-minute to wake, which is a poor first impression for anyone opening a demo link
-cold. Either keep the paid starter instance, or ping `/health` on a schedule to
-keep it warm.
+Cloud Run builds the Dockerfile in the cloud and runs the container behind a
+stable HTTPS URL. Nothing builds or runs on a developer machine. Connect the
+GitHub repo once and every push to `main` redeploys.
+
+One shot from the command line:
+
+```bash
+gcloud run deploy drive-saver-copilot-api \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --memory 2Gi \
+  --cpu 1 \
+  --min-instances 1 \
+  --max-instances 1 \
+  --set-env-vars DSC_CORS_ORIGINS=https://your-dashboard.vercel.app
+```
+
+`--max-instances 1` is not optional. Cloud Run autoscales by default, and the
+telemetry store lives in process: a second instance would not see the first
+one's uploads. Cap it at 1 until that store moves to a database.
+
+`--min-instances 1` keeps one container warm. This image is 1.16 GB and a cold
+start leaves a visitor looking at a dead page for tens of seconds. For a demo
+link that someone clicks once, keep it warm.
+
+Cloud Run ignores the `HEALTHCHECK` in the Dockerfile and uses its own startup
+probe against the container port. `/health` is still the right path to point any
+external uptime check at.
+
+### Render (alternative)
+
+`render.yaml` is a working blueprint if you would rather not use GCP. The free
+tier sleeps after about 15 minutes idle and this image takes roughly a minute to
+wake, so either keep the paid starter instance or ping `/health` on a schedule.
 
 ### Environment
 

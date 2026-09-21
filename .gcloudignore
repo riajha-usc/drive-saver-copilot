@@ -1,0 +1,23 @@
+# What NOT to upload when building from source with `gcloud run deploy --source`.
+#
+# Without this file gcloud derives one from .gitignore, which would be close but
+# would also skip data/raw/ai4i2020.csv. The Dockerfile copies that file, so the
+# build fails without it. Being explicit here avoids that trap.
+
+.git
+.gitignore
+.venv
+.pytest_cache
+__pycache__
+**/__pycache__
+*.pyc
+tests/
+models/
+.env
+render.yaml
+Makefile
+README.md
+requirements-dev.txt
+
+# data/raw/ai4i2020.csv is deliberately NOT ignored. The image trains at build
+# time and needs it.
