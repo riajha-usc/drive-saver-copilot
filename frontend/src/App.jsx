@@ -1,7 +1,22 @@
 import { useEffect, useState } from "react";
-import { getHealth, getModelInfo, listDatasets } from "./api";
+import {
+  applyAdjustment,
+  getAsset,
+  getAssetHistory,
+  getHealth,
+  getModelInfo,
+  getRecommendation,
+  listAssets,
+  listDatasets,
+} from "./api";
+
+import AssetHealth from "./components/AssetHealth";
+import AssetTable from "./components/AssetTable";
 import DashboardHeader from "./components/DashboardHeader";
 import Panel from "./components/Panel";
+import RecommendationPanel from "./components/RecommendationPanel";
+import RootCausePanel from "./components/RootCausePanel";
+import TelemetryCharts from "./components/TelemetryCharts";
 
 export default function App() {
   const [apiState, setApiState] = useState({
@@ -13,11 +28,51 @@ export default function App() {
 
   const [datasets, setDatasets] = useState([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
-  const [selectedAssetId] = useState("");
+  const [selectedAssetId, setSelectedAssetId] = useState("");
+
+  const [assetState, setAssetState] = useState({
+    status: "idle",
+    assets: [],
+    error: "",
+  });
+
+  const [assetDetailState, setAssetDetailState] = useState({
+    status: "idle",
+    detail: null,
+    error: "",
+  });
+
+  const [historyState, setHistoryState] = useState({
+    status: "idle",
+    points: [],
+    note: "",
+    error: "",
+  });
+
+  const [hoursToWindow, setHoursToWindow] = useState(48);
+
+  const [recommendationState, setRecommendationState] = useState({
+    status: "idle",
+    recommendation: null,
+    error: "",
+  });
+
+  const [applyState, setApplyState] = useState({
+    status: "idle",
+    result: null,
+    error: "",
+  });
+
 
   useEffect(() => {
+    let cancelled = false;
+
     Promise.all([getHealth(), getModelInfo(), listDatasets()])
       .then(([health, model, datasetList]) => {
+        if (cancelled) {
+          return;
+        }
+
         setApiState({
           status: "ready",
           health,
@@ -32,6 +87,10 @@ export default function App() {
         }
       })
       .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
         setApiState({
           status: "error",
           health: null,
@@ -39,7 +98,190 @@ export default function App() {
           error: error.message,
         });
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  /*
+   * Load assets whenever the selected dataset changes.
+   */
+  useEffect(() => {
+    if (!selectedDatasetId) {
+      setAssetState({
+        status: "idle",
+        assets: [],
+        error: "",
+      });
+
+      return;
+    }
+
+    let cancelled = false;
+
+    setSelectedAssetId("");
+
+    setAssetState({
+      status: "loading",
+      assets: [],
+      error: "",
+    });
+
+    listAssets(selectedDatasetId, {
+      sort: "risk",
+      limit: 25,
+    })
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+
+        setAssetState({
+          status: "ready",
+          assets: response.assets,
+          error: "",
+        });
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setAssetState({
+          status: "error",
+          assets: [],
+          error: error.message,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDatasetId]);
+
+  /*
+   * Load full risk details whenever an asset is selected.
+   */
+  useEffect(() => {
+    if (!selectedDatasetId || !selectedAssetId) {
+      setAssetDetailState({
+        status: "idle",
+        detail: null,
+        error: "",
+      });
+
+      return;
+    }
+
+    let cancelled = false;
+
+    setAssetDetailState({
+      status: "loading",
+      detail: null,
+      error: "",
+    });
+
+    getAsset(selectedDatasetId, selectedAssetId)
+      .then((detail) => {
+        if (cancelled) {
+          return;
+        }
+
+        setAssetDetailState({
+          status: "ready",
+          detail,
+          error: "",
+        });
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setAssetDetailState({
+          status: "error",
+          detail: null,
+          error: error.message,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDatasetId, selectedAssetId]);
+
+  /*
+   * Load telemetry history whenever an asset is selected.
+   */
+  useEffect(() => {
+    if (!selectedDatasetId || !selectedAssetId) {
+      setHistoryState({
+        status: "idle",
+        points: [],
+        note: "",
+        error: "",
+      });
+
+      return;
+    }
+
+    let cancelled = false;
+
+    setHistoryState({
+      status: "loading",
+      points: [],
+      note: "",
+      error: "",
+    });
+
+    getAssetHistory(selectedDatasetId, selectedAssetId, 60)
+      .then((history) => {
+        if (cancelled) {
+          return;
+        }
+
+        setHistoryState({
+          status: "ready",
+          points: history.points,
+          note: history.note,
+          error: "",
+        });
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
+        setHistoryState({
+          status: "error",
+          points: [],
+          note: "",
+          error: error.message,
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDatasetId, selectedAssetId]);
+
+  /*
+   * Clear the previous recommendation when the selected asset changes.
+   */
+  useEffect(() => {
+    setRecommendationState({
+      status: "idle",
+      recommendation: null,
+      error: "",
+    });
+
+    setApplyState({
+      status: "idle",
+      result: null,
+      error: "",
+    });
+  }, [selectedDatasetId, selectedAssetId]);
 
   const selectedDataset = datasets.find(
     (dataset) => dataset.dataset_id === selectedDatasetId,
@@ -47,6 +289,82 @@ export default function App() {
 
   const apiStatus =
     apiState.status === "ready" ? apiState.health?.status : "loading";
+
+  async function handleGenerateRecommendation() {
+      if (!selectedDatasetId || !selectedAssetId) {
+        return;
+      }
+
+      const hours = Number(hoursToWindow);
+
+      if (!Number.isFinite(hours) || hours <= 0 || hours > 2000) {
+        setRecommendationState({
+          status: "error",
+          recommendation: null,
+          error: "Maintenance window must be between 1 and 2000 hours.",
+        });
+
+        return;
+      }
+
+      setRecommendationState({
+        status: "loading",
+        recommendation: null,
+        error: "",
+      });
+
+      try {
+        const recommendation = await getRecommendation(
+          selectedDatasetId,
+          selectedAssetId,
+          hours,
+        );
+
+        setRecommendationState({
+          status: "ready",
+          recommendation,
+          error: "",
+        });
+      } catch (error) {
+        setRecommendationState({
+          status: "error",
+          recommendation: null,
+          error: error.message,
+        });
+      }
+    }
+
+    async function handleApplyAdjustment() {
+        if (!selectedDatasetId || !selectedAssetId) {
+          return;
+        }
+
+        setApplyState({
+          status: "loading",
+          result: null,
+          error: "",
+        });
+
+        try {
+          const result = await applyAdjustment(
+            selectedDatasetId,
+            selectedAssetId,
+            Number(hoursToWindow),
+          );
+
+          setApplyState({
+            status: "ready",
+            result,
+            error: "",
+          });
+        } catch (error) {
+          setApplyState({
+            status: "error",
+            result: null,
+            error: error.message,
+          });
+        }
+    }
 
   return (
     <div className="app">
@@ -101,17 +419,23 @@ export default function App() {
                   onClick={() => setSelectedDatasetId(dataset.dataset_id)}
                 >
                   <span>{dataset.name}</span>
-                  <small>{dataset.row_count.toLocaleString()} rows</small>
+
+                  <small>
+                    {dataset.row_count.toLocaleString()} rows
+                  </small>
                 </button>
               ))}
             </div>
           </Panel>
 
           <Panel title="ASSET SELECTION">
-            <div className="asset-placeholder">
-              <span>+</span>
-              <p>Asset table will appear here</p>
-            </div>
+            <AssetTable
+              assets={assetState.assets}
+              selectedAssetId={selectedAssetId}
+              onSelect={setSelectedAssetId}
+              loading={assetState.status === "loading"}
+              error={assetState.error}
+            />
           </Panel>
         </aside>
 
@@ -122,77 +446,88 @@ export default function App() {
                 ? `MOTOR ASSET (${selectedAssetId})`
                 : "MOTOR HEALTH OVERVIEW"
             }
-            className="health-panel"
+            className={`health-panel ${
+              assetDetailState.detail?.asset?.risk_band ?? ""
+            }`}
           >
-            <div className="health-summary">
-              <div className="health-gauge">
-                <div className="gauge-arc">
-                  <div className="gauge-value">--</div>
-                </div>
-                <span>HEALTH</span>
-              </div>
+            <AssetHealth
+              detail={assetDetailState.detail}
+              loading={assetDetailState.status === "loading"}
+              error={assetDetailState.error}
+              hasSelection={Boolean(selectedAssetId)}
+            />
+          </Panel>
 
-              <div className="health-copy">
-                <p className="critical-label">AWAITING ASSET SELECTION</p>
-                <p>Select an asset to analyze</p>
-                <strong>Live Health Status</strong>
-              </div>
-            </div>
+          <Panel
+            title="TELEMETRY HISTORY"
+            className="telemetry-panel"
+          >
+            <TelemetryCharts
+              points={historyState.points}
+              note={historyState.note}
+              loading={historyState.status === "loading"}
+              error={historyState.error}
+              hasSelection={Boolean(selectedAssetId)}
+            />
+          </Panel>
 
-            <div className="chart-placeholder">
-              <div className="chart-grid-line" />
-              <div className="chart-grid-line" />
-              <div className="chart-grid-line" />
-
-              <svg
-                viewBox="0 0 800 180"
-                preserveAspectRatio="none"
-                aria-hidden="true"
-              >
-                <polyline
-                  className="placeholder-line primary-line"
-                  points="0,145 90,135 170,130 250,108 330,120 410,70 500,110 585,45 670,95 800,55"
-                />
-
-                <polyline
-                  className="placeholder-line secondary-line"
-                  points="0,158 100,154 200,145 300,136 400,122 500,105 600,90 700,72 800,55"
-                />
-              </svg>
-            </div>
-
-            <div className="chart-legend">
-              <span>
-                <i className="legend-line red" />
-                Process Temperature
-              </span>
-
-              <span>
-                <i className="legend-line gray" />
-                Torque
-              </span>
-            </div>
+          <Panel
+            title="ROOT CAUSE ANALYSIS"
+            className="root-cause-panel"
+          >
+            <RootCausePanel
+              detail={assetDetailState.detail}
+              loading={assetDetailState.status === "loading"}
+              error={assetDetailState.error}
+              hasSelection={Boolean(selectedAssetId)}
+            />
           </Panel>
 
           <Panel title="MODEL SANDBOX" className="sandbox-panel">
             <p className="section-label">ANALYSIS PIPELINE</p>
 
             <div className="timeline">
-              <TimelineStep number="1" label="Dataset" active />
-              <TimelineStep number="2" label="Asset Selection" />
-              <TimelineStep number="3" label="Risk Analysis" />
-              <TimelineStep number="4" label="Recommendation" />
-              <TimelineStep number="5" label="Adjustment" />
+              <TimelineStep
+                number="1"
+                label="Dataset"
+                active={Boolean(selectedDatasetId)}
+              />
+
+              <TimelineStep
+                number="2"
+                label="Asset Selection"
+                active={Boolean(selectedAssetId)}
+              />
+
+              <TimelineStep
+                number="3"
+                label="Risk Analysis"
+                active={assetDetailState.status === "ready"}
+              />
+
+              <TimelineStep
+                number="4"
+                label="Recommendation"
+                active={recommendationState.status === "ready"}
+              />
+              <TimelineStep
+                number="5"
+                label="Adjustment"
+                active={applyState.status === "ready"}
+              />
             </div>
 
             <div className="model-summary">
               <span>
                 Model:{" "}
-                {apiState.health?.model_loaded ? "Loaded" : "Not loaded"}
+                {apiState.health?.model_loaded
+                  ? "Loaded"
+                  : "Not loaded"}
               </span>
 
               <span>
-                Assets at risk: {selectedDataset?.at_risk_count ?? "--"}
+                Assets at risk:{" "}
+                {selectedDataset?.at_risk_count ?? "--"}
               </span>
             </div>
           </Panel>
@@ -203,39 +538,19 @@ export default function App() {
             title="AGENTIC RECOMMENDATION ENGINE"
             className="recommendation-panel"
           >
-            <div className="agent-message">
-              <div className="agent-avatar">●</div>
-
-              <p>
-                Select a dataset and motor asset to begin the prescriptive
-                analysis.
-              </p>
-            </div>
-
-            <div className="recommendation-placeholder">
-              <div className="recommendation-check">✓</div>
-
-              <div>
-                <strong>Prescribed adjustment</strong>
-                <p>No recommendation generated yet.</p>
-              </div>
-            </div>
-
-            <div className="benefit-card">
-              <div>
-                <strong>+ -- Hours</strong>
-                <span>Projected RUL extension</span>
-              </div>
-
-              <div>
-                <strong>$ --</strong>
-                <span>Estimated cost savings</span>
-              </div>
-            </div>
-
-            <button className="implement-button" disabled>
-              VET &amp; IMPLEMENT ADJUSTMENT
-            </button>
+            <RecommendationPanel
+              assetId={selectedAssetId}
+              status={recommendationState.status}
+              recommendation={recommendationState.recommendation}
+              error={recommendationState.error}
+              hoursToWindow={hoursToWindow}
+              onHoursChange={setHoursToWindow}
+              onGenerate={handleGenerateRecommendation}
+              applyStatus={applyState.status}
+              applyResult={applyState.result}
+              applyError={applyState.error}
+              onApply={handleApplyAdjustment}
+            />
           </Panel>
         </aside>
       </main>
@@ -247,7 +562,10 @@ function StatusRow({ label, value, active }) {
   return (
     <div className="status-row">
       <span>{label}</span>
-      <strong className={active ? "active-text" : ""}>{value}</strong>
+
+      <strong className={active ? "active-text" : ""}>
+        {value}
+      </strong>
     </div>
   );
 }
