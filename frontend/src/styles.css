@@ -54,6 +54,9 @@ button {
 /* Header */
 
 .dashboard-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   height: 72px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -132,6 +135,72 @@ button {
   background: #292929;
   color: #9b9b9b;
   font-weight: 700;
+}
+
+.profile-menu {
+  position: relative;
+}
+
+.avatar-button {
+  padding: 0;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.avatar-button:hover,
+.avatar-button[aria-expanded="true"] {
+  border-color: #555;
+  background: #343434;
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 200;
+  width: 210px;
+  overflow: hidden;
+  border: 1px solid #3a3a3a;
+  border-radius: 11px;
+  background: #171717;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.55);
+}
+
+.profile-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px 15px;
+  border-bottom: 1px solid #303030;
+}
+
+.profile-details strong {
+  font-size: 13px;
+}
+
+.profile-details span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.logout-button {
+  width: 100%;
+  padding: 12px 15px;
+  border: 0;
+  background: transparent;
+  color: #d6d6d6;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.logout-button:hover {
+  background: rgba(255, 77, 64, 0.12);
+  color: var(--abb-red);
 }
 
 .global-error {
@@ -656,7 +725,13 @@ button {
 
 .telemetry-chart-area {
   width: 100%;
-  height: 165px;
+  height: 220px;
+  min-height: 220px;
+}
+
+.telemetry-chart-card,
+.telemetry-chart-card .recharts-responsive-container {
+  overflow: visible;
 }
 
 .telemetry-state {
@@ -1236,84 +1311,32 @@ button {
   line-height: 1.5;
 }
 
-/* Fixed desktop workspace */
+/* Desktop layout - the full page scrolls so no panel is clipped */
 
 @media (min-width: 1181px) {
-  html,
-  body,
-  #root {
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .app {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  .dashboard-header {
-    flex: 0 0 72px;
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .dashboard-grid {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
+    align-items: start;
+    overflow: visible;
   }
 
   .left-column,
   .center-column,
   .right-column {
-    min-height: 0;
-    height: 100%;
-  }
-
-  .left-column,
-  .right-column {
-    overflow: hidden;
-  }
-
-  .center-column {
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-right: 5px;
-  }
-
-  .left-column > .dashboard-panel {
-    flex: 0 0 auto;
-  }
-
-  .left-column > .dashboard-panel:last-child {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .left-column > .dashboard-panel:last-child .panel-content {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
+    height: auto;
+    overflow: visible;
   }
 
   .asset-table {
-    height: 100%;
-    max-height: none;
-  }
-
-  .right-column > .dashboard-panel {
-    height: 100%;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+    max-height: 520px;
   }
 
   .recommendation-panel .panel-content {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
+    overflow: visible;
   }
 }
 

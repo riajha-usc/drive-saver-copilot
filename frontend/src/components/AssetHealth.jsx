@@ -18,11 +18,19 @@ export default function AssetHealth({
   }
 
   if (loading) {
-    return <div className="health-state">Analyzing selected asset...</div>;
+    return (
+      <div className="health-state">
+        Analyzing selected asset...
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="health-state error-text">{error}</div>;
+    return (
+      <div className="health-state error-text">
+        {error}
+      </div>
+    );
   }
 
   if (!detail) {
@@ -31,25 +39,37 @@ export default function AssetHealth({
 
   const { asset } = detail;
   const failureRisk = asset.failure_probability * 100;
-  const healthScore = Math.max(0, 100 - failureRisk);
+  const healthScore = Math.max(0, Math.min(100, 100 - failureRisk));
+
+  /*
+   * Very small SVG arcs with rounded ends appear as two dots.
+   * Hide the progress path when health is below 1%.
+   */
+  const showHealthArc = healthScore >= 1;
 
   return (
     <div className={`asset-health ${asset.risk_band}`}>
       <div className="asset-health-summary">
         <div className="dynamic-gauge">
-          <svg viewBox="0 0 120 68" aria-label={`${healthScore}% health`}>
+          <svg
+            viewBox="0 0 120 68"
+            role="img"
+            aria-label={`${formatNumber(healthScore, 1)} percent health`}
+          >
             <path
               className="gauge-background"
               pathLength="100"
               d="M 10 60 A 50 50 0 0 1 110 60"
             />
 
-            <path
-              className="gauge-progress"
-              pathLength="100"
-              strokeDasharray={`${healthScore} 100`}
-              d="M 10 60 A 50 50 0 0 1 110 60"
-            />
+            {showHealthArc && (
+              <path
+                className="gauge-progress"
+                pathLength="100"
+                strokeDasharray={`${healthScore} 100`}
+                d="M 10 60 A 50 50 0 0 1 110 60"
+              />
+            )}
           </svg>
 
           <div className="dynamic-gauge-value">
@@ -60,7 +80,9 @@ export default function AssetHealth({
         </div>
 
         <div className="asset-health-message">
-          <p className="risk-label">{asset.risk_band} health</p>
+          <p className="risk-label">
+            {asset.risk_band} health
+          </p>
 
           <strong>{detail.likely_failure_mode_name}</strong>
 

@@ -104,9 +104,6 @@ export default function App() {
     };
   }, []);
 
-  /*
-   * Load assets whenever the selected dataset changes.
-   */
   useEffect(() => {
     if (!selectedDatasetId) {
       setAssetState({

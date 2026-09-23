@@ -12,7 +12,6 @@ export default function Panel({
         <div className="panel-actions">
           {actions}
           <button className="menu-button" aria-label={`More options for ${title}`}>
-            ⋮
           </button>
         </div>
       </div>
