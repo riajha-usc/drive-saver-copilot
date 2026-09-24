@@ -231,6 +231,15 @@ export default function App() {
           loadingMore: false,
           error: "",
         });
+
+        /*
+         * Open the riskiest asset when nothing is selected yet, so the first
+         * screen shows a diagnosis and a prescription instead of an empty
+         * "select an asset" prompt. An existing selection is never replaced.
+         */
+        setSelectedAssetId(
+          (current) => current || response.assets[0]?.asset_id || "",
+        );
       })
       .catch((error) => {
         if (cancelled) {
