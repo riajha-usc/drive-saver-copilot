@@ -80,6 +80,10 @@ export default function App() {
     error: "",
   });
 
+  const [windowHours, setWindowHours] = useState(
+    DEFAULT_MAINTENANCE_WINDOW_HOURS,
+  );
+
   const [assetDetailState, setAssetDetailState] = useState({
     status: "idle",
     detail: null,
@@ -374,8 +378,9 @@ export default function App() {
   }, [selectedDatasetId, selectedAssetId]);
 
   /*
-   * Automatically generate a recommendation after an asset
-   * is selected.
+   * Automatically generate a recommendation after an asset is selected, and
+   * again whenever the maintenance window changes, because the window is part
+   * of the question the agent is answering.
    */
   useEffect(() => {
     if (!selectedDatasetId || !selectedAssetId) {
@@ -392,7 +397,7 @@ export default function App() {
     const requestKey = [
       selectedDatasetId,
       selectedAssetId,
-      DEFAULT_MAINTENANCE_WINDOW_HOURS,
+      windowHours,
     ].join(":");
 
     let recommendationPromise;
@@ -408,7 +413,7 @@ export default function App() {
       recommendationPromise = getRecommendation(
         selectedDatasetId,
         selectedAssetId,
-        DEFAULT_MAINTENANCE_WINDOW_HOURS,
+        windowHours,
       );
 
       recommendationRequestRef.current = {
@@ -450,7 +455,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedDatasetId, selectedAssetId]);
+  }, [selectedDatasetId, selectedAssetId, windowHours]);
 
   const selectedDataset = datasets.find(
     (dataset) =>
@@ -479,13 +484,13 @@ export default function App() {
     const requestKey = [
       selectedDatasetId,
       selectedAssetId,
-      DEFAULT_MAINTENANCE_WINDOW_HOURS,
+      windowHours,
     ].join(":");
 
     const recommendationPromise = getRecommendation(
       selectedDatasetId,
       selectedAssetId,
-      DEFAULT_MAINTENANCE_WINDOW_HOURS,
+      windowHours,
     );
 
     recommendationRequestRef.current = {
@@ -540,7 +545,7 @@ export default function App() {
       const result = await applyAdjustment(
         selectedDatasetId,
         selectedAssetId,
-        DEFAULT_MAINTENANCE_WINDOW_HOURS,
+        windowHours,
       );
 
       setApplyState({
