@@ -22,6 +22,9 @@ import TelemetryCharts from "./components/TelemetryCharts";
 const DEFAULT_MAINTENANCE_WINDOW_HOURS = 48;
 const THEME_STORAGE_KEY = "drive-saver-theme";
 
+/* Seeded by the API at startup; see DEFAULT_DATASET_ID in backend/api/store.py. */
+const SAMPLE_DATASET_ID = "ai4i-sample";
+
 /*
  * Browser storage can throw in a private window or when site data is blocked.
  * The theme is only a convenience, so fall back quietly instead of failing to
@@ -111,6 +114,15 @@ export default function App() {
   }, [theme]);
 
   /*
+   * Selecting a dataset and an asset together means the effects below never
+   * run with a new dataset and a stale asset id from the previous one.
+   */
+  function selectDataset(datasetId, assetId = "") {
+    setSelectedDatasetId(datasetId);
+    setSelectedAssetId(assetId);
+  }
+
+  /*
    * Load API health, model information and datasets.
    */
   useEffect(() => {
@@ -135,10 +147,18 @@ export default function App() {
 
         setDatasets(datasetList);
 
-        if (datasetList.length > 0) {
-          setSelectedDatasetId(
-            datasetList[0].dataset_id,
-          );
+        /*
+         * The API lists the newest upload first. Uploads live on a shared
+         * server, so defaulting to the newest would open whatever the last
+         * visitor uploaded. Start on the bundled sample when it is there.
+         */
+        const initialDataset =
+          datasetList.find(
+            (dataset) => dataset.dataset_id === SAMPLE_DATASET_ID,
+          ) ?? datasetList[0];
+
+        if (initialDataset) {
+          selectDataset(initialDataset.dataset_id);
         }
       })
       .catch((error) => {
@@ -174,8 +194,6 @@ export default function App() {
     }
 
     let cancelled = false;
-
-    setSelectedAssetId("");
 
     setAssetState({
       status: "loading",
@@ -558,13 +576,16 @@ export default function App() {
                   : ""
               }`}
               onClick={() =>
-                setSelectedDatasetId(dataset.dataset_id)
+                selectDataset(dataset.dataset_id)
               }
             >
               <span>{dataset.name}</span>
 
               <small>
                 {dataset.row_count.toLocaleString()} rows
+                {" · "}
+                {dataset.at_risk_count.toLocaleString()} at
+                risk
               </small>
             </button>
           ))}
