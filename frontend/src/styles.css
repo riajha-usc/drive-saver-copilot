@@ -2957,6 +2957,60 @@ html[data-theme="light"] .recommendation-view::-webkit-scrollbar-thumb {
 }
 
 /* ------------------------------------------------------------------ */
+/* Upload                                                              */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The file input stays in the accessibility tree and keyboard order. The
+ * original rule hid it with display: none, which made the upload control
+ * unreachable without a mouse.
+ */
+.upload-button {
+  position: relative;
+}
+
+.upload-button input {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.upload-button.disabled input {
+  cursor: wait;
+}
+
+.upload-button:focus-within {
+  border-color: var(--abb-red);
+  color: var(--abb-red);
+}
+
+.upload-message {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.upload-error {
+  margin-top: 10px;
+  padding: 9px;
+  border: 1px solid var(--abb-red);
+  border-radius: 7px;
+  color: var(--abb-red);
+  background: var(--abb-dark-red);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* Light theme for elements whose base rules use fixed dark colours. */
+
+html[data-theme="light"] .upload-button {
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ */
 /* Responsive                                                          */
 /* ------------------------------------------------------------------ */
 

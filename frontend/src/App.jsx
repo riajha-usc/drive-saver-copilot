@@ -15,6 +15,7 @@ import AssetFilters from "./components/AssetFilters";
 import AssetHealth from "./components/AssetHealth";
 import AssetTable from "./components/AssetTable";
 import DashboardHeader from "./components/DashboardHeader";
+import DatasetUploader from "./components/DatasetUploader";
 import MaintenanceWindowControl from "./components/MaintenanceWindowControl";
 import Panel from "./components/Panel";
 import RecommendationPanel from "./components/RecommendationPanel";
@@ -628,6 +629,26 @@ export default function App() {
     }
   }
 
+  /*
+   * Switch to a freshly uploaded dataset and open its riskiest asset, so the
+   * recommendation panel fills in straight away.
+   */
+  function handleUploaded(summary) {
+    setDatasets((current) => [
+      summary,
+      ...current.filter(
+        (dataset) =>
+          dataset.dataset_id !== summary.dataset_id,
+      ),
+    ]);
+
+    setAssetFilter("all");
+    selectDataset(
+      summary.dataset_id,
+      summary.highest_risk_asset || "",
+    );
+  }
+
   function handleThemeToggle() {
     setTheme((currentTheme) =>
       currentTheme === "dark" ? "light" : "dark",
@@ -672,6 +693,8 @@ export default function App() {
             </button>
           ))}
         </div>
+
+        <DatasetUploader onUploaded={handleUploaded} />
       </>
     );
   }
