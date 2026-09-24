@@ -73,7 +73,7 @@ def test_a_prescription_either_clears_the_fault_or_says_it_cannot(failing_recomm
             continue
         if rec.action_type == "stop_now":
             assert rec.adjustments == []
-            assert any("clears" in c for c in rec.caveats)
+            assert any("still leaves" in c for c in rec.caveats)
         elif rec.adjustments:
             moved = _point(row).replace(
                 **{a.parameter: a.recommended_value for a in rec.adjustments})
@@ -177,7 +177,11 @@ def test_the_agent_is_deterministic(bundle, overstrain_point):
     """Same telemetry in, same card out. A demo that drifts is not demoable."""
     a = run(overstrain_point, asset_id="VFD-07", hours_to_window=48, bundle=bundle)
     b = run(overstrain_point, asset_id="VFD-07", hours_to_window=48, bundle=bundle)
-    assert a.model_dump(exclude={"generated_at"}) == b.model_dump(exclude={"generated_at"})
+    # Step timings are wall clock, so they are the one part allowed to vary.
+    volatile = {"generated_at", "reasoning"}
+    assert a.model_dump(exclude=volatile) == b.model_dump(exclude=volatile)
+    assert ([(s.node, s.title, s.detail) for s in a.reasoning]
+            == [(s.node, s.title, s.detail) for s in b.reasoning])
 
 
 def test_a_tighter_window_never_yields_a_weaker_action(bundle, overstrain_point):

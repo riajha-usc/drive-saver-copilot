@@ -97,6 +97,15 @@ class Narrative(Strict):
     generated_by: Literal["llm", "deterministic"]
 
 
+class ReasoningStep(Strict):
+    """One node of the agent, as an operator would read it."""
+
+    node: Literal["ingest", "diagnose", "simulate", "decide", "narrate", "validate"]
+    title: str
+    detail: str
+    duration_ms: float = Field(ge=0)
+
+
 class PrescriptiveRecommendation(Strict):
     """Top level payload served to the dashboard."""
 
@@ -118,3 +127,6 @@ class PrescriptiveRecommendation(Strict):
                                      description="Other simulated options, best first")
     confidence: float = Field(ge=0, le=1)
     caveats: list[str] = Field(default_factory=list)
+    reasoning: list[ReasoningStep] = Field(
+        default_factory=list,
+        description="The agent's steps in order, with what each one found")

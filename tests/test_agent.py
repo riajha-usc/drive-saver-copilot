@@ -97,7 +97,7 @@ def test_unfixable_fault_stops_the_asset_rather_than_derating(bundle, unfixable_
     assert rec.projection.projected_rul_hours == rec.projection.baseline_rul_hours
     assert rec.economics.net_benefit_usd == 0.0
     assert not rec.projection.reaches_maintenance_window
-    assert any("clears PWF" in c for c in rec.caveats)
+    assert any("still leaves PWF" in c for c in rec.caveats)
     # The palliative option is still visible, just not prescribed.
     assert rec.alternatives
 
@@ -115,3 +115,44 @@ def test_no_action_asset_reports_reaching_the_window(bundle, healthy_point):
     assert rec.risk.likely_failure_mode == "none"
     assert rec.root_cause.primary_driver == "none"
     assert rec.root_cause.controllable_lever == "none"
+
+
+# ------------------------------------------------------------ reasoning steps
+
+NODES = ["ingest", "diagnose", "simulate", "decide", "narrate", "validate"]
+
+
+def test_reasoning_lists_every_node_in_order(bundle, overstrain_point):
+    rec = graph.run(overstrain_point, bundle=bundle)
+    assert [s.node for s in rec.reasoning] == NODES
+    assert all(s.title and s.detail and s.duration_ms >= 0 for s in rec.reasoning)
+
+
+def test_reasoning_reports_what_the_simulation_rejected(bundle, overstrain_point):
+    rec = graph.run(overstrain_point, bundle=bundle)
+    simulate = next(s for s in rec.reasoning if s.node == "simulate")
+    assert "Tested" in simulate.detail and "rejected" in simulate.detail
+    # The overstrain point is near the power ceiling, so some speed increases
+    # are thrown out for causing a Power Failure; the step should say so.
+    assert "Power Failure" in simulate.detail
+
+
+def test_reasoning_matches_the_decision(bundle, overstrain_point, healthy_point,
+                                        unfixable_point):
+    fix = graph.run(overstrain_point, hours_to_window=48, bundle=bundle)
+    decide = next(s for s in fix.reasoning if s.node == "decide")
+    assert "48 hour window" in decide.detail
+
+    healthy = graph.run(healthy_point, bundle=bundle)
+    assert next(s for s in healthy.reasoning if s.node == "simulate").title.startswith("Skipped")
+    assert "no action" in next(s for s in healthy.reasoning if s.node == "decide").title
+
+    stop = graph.run(unfixable_point, bundle=bundle)
+    assert "PWF" in next(s for s in stop.reasoning if s.node == "decide").detail
+
+
+def test_reasoning_says_who_wrote_the_explanation(monkeypatch, bundle, overstrain_point):
+    monkeypatch.setattr("backend.config.ANTHROPIC_API_KEY", None)
+    rec = graph.run(overstrain_point, bundle=bundle)
+    narrate = next(s for s in rec.reasoning if s.node == "narrate")
+    assert "template" in narrate.detail

@@ -12,6 +12,8 @@ Entry point: run(telemetry, asset_id, hours_to_window) -> PrescriptiveRecommenda
 
 from __future__ import annotations
 
+import time
+from collections import Counter
 from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -21,8 +23,9 @@ from backend.agent import economics
 from backend.agent.counterfactual import Candidate, select, simulate
 from backend.agent.llm import llm_narration
 from backend.agent.schema import (Economics, Narrative, ParameterAdjustment,
-                                  PrescriptiveRecommendation, Projection, RiskAssessment,
-                                  RootCause, RootCauseFactor, TelemetrySnapshot)
+                                  PrescriptiveRecommendation, Projection, ReasoningStep,
+                                  RiskAssessment, RootCause, RootCauseFactor,
+                                  TelemetrySnapshot)
 from backend.ml.predict import MODE_NAMES, Prediction, load_bundle, predict
 
 # Below this probability there is nothing worth prescribing.
@@ -46,38 +49,80 @@ class AgentState(TypedDict, total=False):
     narrative: Narrative
     recommendation: PrescriptiveRecommendation
     trace: Annotated[list[str], lambda a, b: a + b]
+    steps: Annotated[list[dict], lambda a, b: a + b]
 
 
 # ---------------------------------------------------------------- nodes
 
+def _step(node: str, title: str, detail: str, started: float) -> dict:
+    """A readable account of one node, for the dashboard's reasoning view."""
+    return {"node": node, "title": title, "detail": detail,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 1)}
+
+
 def ingest(state: AgentState) -> dict:
     """Bind the trained bundle and normalise the incoming telemetry."""
+    started = time.perf_counter()
     bundle = state.get("bundle") or load_bundle()
-    return {"bundle": bundle, "trace": ["ingest"]}
+    return {"bundle": bundle, "trace": ["ingest"],
+            "steps": [_step("ingest", "Loaded the failure models",
+                            f"{len(bundle.models)} trained models ready.", started)]}
 
 
 def diagnose(state: AgentState) -> dict:
     """Task 1 and 2 combined: risk, RUL proxy, SHAP root cause, physical margins."""
+    started = time.perf_counter()
     pred = predict(state["operating_point"], bundle=state["bundle"], explain=True)
-    return {"prediction": pred, "trace": [f"diagnose p={pred.failure_probability:.3f}"]}
+
+    detail = f"{pred.risk_band.capitalize()} risk, {pred.failure_probability:.1%} chance of failure"
+    if pred.likely_mode in MODE_NAMES:
+        detail += f", most likely {pred.likely_mode_name}"
+    detail += "."
+    if pred.rule_violations:
+        detail += f" Physical limits breached: {', '.join(pred.rule_violations)}."
+    pushing = [a for a in pred.attributions if a.shap_value > 0]
+    if pushing:
+        detail += f" Top driver: {pushing[0].label} ({pushing[0].share_of_risk:.0%} of the risk)."
+
+    return {"prediction": pred, "trace": [f"diagnose p={pred.failure_probability:.3f}"],
+            "steps": [_step("diagnose", "Diagnosed the asset", detail, started)]}
 
 
 def simulate_node(state: AgentState) -> dict:
     """Run the counterfactual grid, unless the asset is already healthy."""
+    started = time.perf_counter()
     pred = state["prediction"]
     # A breached limit always earns a simulation, however low the model reads.
     if pred.failure_probability < ACTION_THRESHOLD and not pred.rule_violations:
-        return {"candidates": [], "trace": ["simulate skipped, risk below action threshold"]}
+        return {"candidates": [], "trace": ["simulate skipped, risk below action threshold"],
+                "steps": [_step("simulate", "Skipped the simulation",
+                                "Risk is low and no physical limit is breached, "
+                                "so there is nothing to fix.", started)]}
     cands = simulate(state["operating_point"], bundle=state["bundle"])
-    return {"candidates": cands, "trace": [f"simulate {len(cands)} candidates"]}
+
+    safe = sum(c.feasible for c in cands)
+    rejected = [c for c in cands if not c.feasible]
+    new_failures = Counter(m for c in rejected for m in c.new_violations)
+    detail = (f"Tested {len(cands)} torque, speed and maintenance options: "
+              f"{safe} safe, {len(rejected)} rejected.")
+    if new_failures:
+        worst = ", ".join(f"{n} would cause {MODE_NAMES.get(m, m)}"
+                          for m, n in new_failures.most_common(2))
+        detail += f" Of those, {worst}."
+    return {"candidates": cands, "trace": [f"simulate {len(cands)} candidates"],
+            "steps": [_step("simulate", "Simulated adjustments", detail, started)]}
 
 
 def decide(state: AgentState) -> dict:
     """Pick the smallest intervention that carries the asset to the window."""
+    started = time.perf_counter()
     pred = state["prediction"]
     if not state.get("candidates"):
         return {"chosen": None, "alternatives": [], "action_type": "no_action",
-                "trace": ["decide no_action"]}
+                "trace": ["decide no_action"],
+                "steps": [_step("decide", "Decided no action is needed",
+                                "The asset is healthy, so the current setpoints stay.",
+                                started)]}
 
     chosen, alts = select(state["candidates"], state["hours_to_window"], pred.rul_hours,
                           baseline_violations=pred.rule_violations)
@@ -105,8 +150,23 @@ def decide(state: AgentState) -> dict:
         alts = [chosen, *alts][:4]
         chosen = None
 
+    window = state["hours_to_window"]
+    if action == "stop_now":
+        title = "Recommended stopping the asset"
+        detail = (f"No single safe change clears every breached limit; the best "
+                  f"option still leaves {', '.join(sorted(unresolved))}."
+                  if unresolved else
+                  f"No safe change reaches the {window:g} hour maintenance window.")
+    else:
+        title = "Chose the smallest safe change"
+        reach = ("past" if chosen.rul_hours >= window else "still short of")
+        detail = (f"{chosen.description}: projected life {chosen.rul_hours:.0f} hours, "
+                  f"{reach} the {window:g} hour window, at "
+                  f"{chosen.throughput_loss_pct:.1f}% output loss.")
+
     return {"chosen": chosen, "alternatives": alts, "action_type": action,
-            "unresolved": sorted(unresolved), "trace": [f"decide {action}"]}
+            "unresolved": sorted(unresolved), "trace": [f"decide {action}"],
+            "steps": [_step("decide", title, detail, started)]}
 
 
 def _adjustments(op: physics.OperatingPoint, chosen: Candidate | None) -> list[ParameterAdjustment]:
@@ -134,6 +194,7 @@ def _adjustments(op: physics.OperatingPoint, chosen: Candidate | None) -> list[P
 
 def narrate(state: AgentState) -> dict:
     """The only node that touches an LLM, and it only writes prose."""
+    started = time.perf_counter()
     pred, chosen = state["prediction"], state.get("chosen")
     pushing = [a for a in pred.attributions if a.shap_value > 0]
     top = pushing[0] if pushing else None
@@ -160,9 +221,13 @@ def narrate(state: AgentState) -> dict:
         "unresolved": ", ".join(state.get("unresolved", [])) or "the fault",
     }
     narration, source = llm_narration(ctx)
+    detail = ("Written by the language model from the computed figures."
+              if source == "llm" else
+              "Written from the built in template; no language model is configured.")
     return {"context": ctx,
             "narrative": Narrative(**narration.model_dump(), generated_by=source),
-            "trace": [f"narrate via {source}"]}
+            "trace": [f"narrate via {source}"],
+            "steps": [_step("narrate", "Wrote the explanation", detail, started)]}
 
 
 def _confidence(pred: Prediction, chosen: Candidate | None) -> float:
@@ -187,7 +252,8 @@ def _caveats(state: AgentState, chosen: Candidate | None) -> list[str]:
         out.append(f"This action gives up {chosen.throughput_loss_pct:.1f} percent of shaft output. "
                    "Confirm the line can absorb it before applying.")
     if state.get("unresolved"):
-        out.append(f"No available setpoint change clears {', '.join(state['unresolved'])}. "
+        out.append(f"No single safe change clears every breached limit; the best option "
+                   f"still leaves {', '.join(state['unresolved'])}. "
                    "The action below buys time, it does not remove the fault.")
     if pred.rule_violations and pred.failure_probability < ACTION_THRESHOLD:
         out.append(f"The model reads this asset as low risk, but "
@@ -201,6 +267,7 @@ def _caveats(state: AgentState, chosen: Candidate | None) -> list[str]:
 
 def validate(state: AgentState) -> dict:
     """Task 4: assemble and enforce the strict output contract."""
+    started = time.perf_counter()
     op, pred, chosen = state["operating_point"], state["prediction"], state.get("chosen")
     binding = pred.margins[physics.binding_mode(op)]
 
@@ -264,7 +331,12 @@ def validate(state: AgentState) -> dict:
         confidence=_confidence(pred, chosen),
         caveats=_caveats(state, chosen),
     )
-    return {"recommendation": rec, "trace": ["validate ok"]}
+    # This node's own step is added last, once the payload has passed validation,
+    # so its timing covers the whole assembly.
+    own = _step("validate", "Validated the output",
+                "Every figure checked against the strict output schema.", started)
+    rec.reasoning = [ReasoningStep(**step) for step in [*state.get("steps", []), own]]
+    return {"recommendation": rec, "trace": ["validate ok"], "steps": [own]}
 
 
 # ---------------------------------------------------------------- graph
@@ -312,7 +384,7 @@ def run(telemetry: dict | physics.OperatingPoint, asset_id: str = "MOTOR-01",
 
     final = get_graph().invoke({
         "asset_id": asset_id, "hours_to_window": float(hours_to_window),
-        "operating_point": op, "bundle": bundle, "trace": [],
+        "operating_point": op, "bundle": bundle, "trace": [], "steps": [],
     })
     if return_trace:
         return final["recommendation"], final["trace"]

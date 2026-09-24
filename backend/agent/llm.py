@@ -45,7 +45,8 @@ def deterministic_narration(ctx: dict) -> NarrationOut:
     """Template narrator. Always available, no network."""
     if ctx["action_type"] == "stop_now":
         return NarrationOut(
-            headline=f"Take {ctx['asset_id']} off line, no setpoint change clears {ctx['unresolved']}",
+            headline=(f"Take {ctx['asset_id']} off line, no single safe change "
+                      f"clears {ctx['unresolved']}"),
             explanation=(
                 f"{ctx['asset_id']} is at {ctx['risk_band']} risk of {ctx['mode_name']} "
                 f"({ctx['failure_probability_pct']} within the reference horizon) and "
