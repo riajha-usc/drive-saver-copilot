@@ -9,3 +9,6 @@ data/raw/*.csv
 models/
 frontend/node_modules/
 frontend/dist/
+
+# Detailed internal design notes, kept out of the repo.
+TECHNICAL_DOCUMENTATION.md
