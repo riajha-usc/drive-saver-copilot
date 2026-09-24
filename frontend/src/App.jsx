@@ -20,6 +20,30 @@ import RootCausePanel from "./components/RootCausePanel";
 import TelemetryCharts from "./components/TelemetryCharts";
 
 const DEFAULT_MAINTENANCE_WINDOW_HOURS = 48;
+const THEME_STORAGE_KEY = "drive-saver-theme";
+
+/*
+ * Browser storage can throw in a private window or when site data is blocked.
+ * The theme is only a convenience, so fall back quietly instead of failing to
+ * render the dashboard.
+ */
+function readSavedTheme() {
+  try {
+    return localStorage.getItem(THEME_STORAGE_KEY) === "light"
+      ? "light"
+      : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+function saveTheme(theme) {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // Not remembering the theme is harmless.
+  }
+}
 
 export default function App() {
   const recommendationRequestRef = useRef({
@@ -27,13 +51,7 @@ export default function App() {
     promise: null,
   });
 
-  const [theme, setTheme] = useState(() => {
-    const savedTheme = localStorage.getItem(
-      "drive-saver-theme",
-    );
-
-    return savedTheme === "light" ? "light" : "dark";
-  });
+  const [theme, setTheme] = useState(readSavedTheme);
 
   const [apiState, setApiState] = useState({
     status: "loading",
@@ -89,7 +107,7 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
 
-    localStorage.setItem("drive-saver-theme", theme);
+    saveTheme(theme);
   }, [theme]);
 
   /*
@@ -565,17 +583,15 @@ export default function App() {
 
       {apiState.status === "error" && (
         <div className="global-error">
-          Could not connect to the local API:{" "}
+          Could not reach the Drive-Saver API:{" "}
           {apiState.error}
         </div>
       )}
 
       <main className="dashboard-grid">
         <aside className="left-column">
-          <Panel title="AGENT ACTIVITY LOG">
-            <p className="section-label">
-              BACKGROUND PROCESSES
-            </p>
+          <Panel title="SYSTEM STATUS">
+            <p className="section-label">SERVICES</p>
 
             <div className="status-list">
               <StatusRow
@@ -744,12 +760,10 @@ export default function App() {
           </Panel>
 
           <Panel
-            title="MODEL SANDBOX"
+            title="ANALYSIS PIPELINE"
             className="sandbox-panel"
           >
-            <p className="section-label">
-              ANALYSIS PIPELINE
-            </p>
+            <p className="section-label">PROGRESS</p>
 
             <div className="timeline">
               <TimelineStep
