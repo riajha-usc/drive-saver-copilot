@@ -10,11 +10,33 @@ import {
   YAxis,
 } from "recharts";
 
-const tooltipStyle = {
-  background: "#171717",
-  border: "1px solid #444",
-  borderRadius: "8px",
-  color: "#f2f2f2",
+/*
+ * Recharts draws SVG with explicit colours, so the palette follows the
+ * dashboard theme here rather than through CSS.
+ */
+const PALETTES = {
+  dark: {
+    grid: "#343434",
+    axis: "#777",
+    tick: "#888",
+    tooltipBackground: "#171717",
+    tooltipBorder: "#444",
+    tooltipText: "#f2f2f2",
+    muted: "#bdbdbd",
+    primary: "#ff4d40",
+    torque: "#f5a623",
+  },
+  light: {
+    grid: "#e3e6ea",
+    axis: "#9aa3ad",
+    tick: "#69727d",
+    tooltipBackground: "#ffffff",
+    tooltipBorder: "#d9dee5",
+    tooltipText: "#20242a",
+    muted: "#5b6570",
+    primary: "#e53935",
+    torque: "#a96800",
+  },
 };
 
 export default function TelemetryCharts({
@@ -23,8 +45,10 @@ export default function TelemetryCharts({
   loading,
   error,
   hasSelection,
+  theme = "dark",
 }) {
   const [expandedChart, setExpandedChart] = useState(null);
+  const palette = PALETTES[theme] ?? PALETTES.dark;
 
   if (!hasSelection) {
     return (
@@ -87,13 +111,13 @@ export default function TelemetryCharts({
           onKeyDown={(event) => handleKeyboard(event, "temperature")}
         >
           <LineChart data={points}>
-            <ChartBase />
+            <ChartBase palette={palette} />
 
             <Line
               type="monotone"
               dataKey="air_temperature"
               name="Air temperature"
-              stroke="#bdbdbd"
+              stroke={palette.muted}
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}
@@ -103,7 +127,7 @@ export default function TelemetryCharts({
               type="monotone"
               dataKey="process_temperature"
               name="Process temperature"
-              stroke="#ff4d40"
+              stroke={palette.primary}
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}
@@ -121,13 +145,13 @@ export default function TelemetryCharts({
           onKeyDown={(event) => handleKeyboard(event, "speed")}
         >
           <LineChart data={points}>
-            <ChartBase />
+            <ChartBase palette={palette} />
 
             <Line
               type="monotone"
               dataKey="rotational_speed"
               name="Speed"
-              stroke="#ff4d40"
+              stroke={palette.primary}
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}
@@ -145,13 +169,13 @@ export default function TelemetryCharts({
           onKeyDown={(event) => handleKeyboard(event, "torque")}
         >
           <LineChart data={points}>
-            <ChartBase />
+            <ChartBase palette={palette} />
 
             <Line
               type="monotone"
               dataKey="torque"
               name="Torque"
-              stroke="#f5a623"
+              stroke={palette.torque}
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}
@@ -200,33 +224,45 @@ function ChartCard({
   );
 }
 
-function ChartBase() {
+function ChartBase({ palette }) {
   return (
     <>
-      <CartesianGrid stroke="#343434" strokeDasharray="3 3" />
+      <CartesianGrid stroke={palette.grid} strokeDasharray="3 3" />
 
       <XAxis
         dataKey="row_index"
-        stroke="#777"
-        tick={{ fill: "#888", fontSize: 10 }}
+        stroke={palette.axis}
+        tick={{ fill: palette.tick, fontSize: 10 }}
         tickLine={false}
       />
 
+      {/*
+        Fit the axis to the data. Starting at zero flattened the temperature
+        lines, which sit between roughly 295 and 315 K, into one straight line
+        along the top of the chart.
+      */}
       <YAxis
         width={45}
-        stroke="#777"
-        tick={{ fill: "#888", fontSize: 10 }}
+        domain={["auto", "auto"]}
+        allowDecimals={false}
+        stroke={palette.axis}
+        tick={{ fill: palette.tick, fontSize: 10 }}
         tickLine={false}
       />
 
       <Tooltip
-        contentStyle={tooltipStyle}
-        labelStyle={{ color: "#bdbdbd" }}
+        contentStyle={{
+          background: palette.tooltipBackground,
+          border: `1px solid ${palette.tooltipBorder}`,
+          borderRadius: "8px",
+          color: palette.tooltipText,
+        }}
+        labelStyle={{ color: palette.muted }}
       />
 
       <Legend
         wrapperStyle={{
-          color: "#bdbdbd",
+          color: palette.muted,
           fontSize: "11px",
         }}
       />

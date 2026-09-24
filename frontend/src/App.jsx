@@ -753,6 +753,7 @@ export default function App() {
                     hasSelection={Boolean(
                       selectedAssetId,
                     )}
+                    theme={theme}
                   />
                 </div>
               )}
