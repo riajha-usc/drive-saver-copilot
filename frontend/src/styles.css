@@ -3004,10 +3004,73 @@ html[data-theme="light"] .recommendation-view::-webkit-scrollbar-thumb {
   line-height: 1.4;
 }
 
+/* ------------------------------------------------------------------ */
+/* Recommendation alternatives                                         */
+/* ------------------------------------------------------------------ */
+
+.recommendation-summary-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.recommendation-small-card:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.alternatives-note {
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  border-left: 3px solid var(--amber);
+  color: var(--muted);
+  background: rgba(245, 166, 35, 0.08);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.alternative-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alternative-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.alternative-item strong {
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.alternative-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.alternative-item small {
+  color: var(--amber);
+  font-size: 9px;
+}
+
 /* Light theme for elements whose base rules use fixed dark colours. */
 
 html[data-theme="light"] .upload-button {
   color: var(--muted);
+}
+
+html[data-theme="light"] .recommendation-small-card:disabled {
+  opacity: 0.5;
 }
 
 /* ------------------------------------------------------------------ */
@@ -3023,5 +3086,11 @@ html[data-theme="light"] .upload-button {
 @media (max-width: 820px) {
   .header-context span {
     display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .recommendation-summary-grid {
+    grid-template-columns: 1fr;
   }
 }

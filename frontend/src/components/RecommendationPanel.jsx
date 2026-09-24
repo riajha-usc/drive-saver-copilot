@@ -102,6 +102,7 @@ export default function RecommendationPanel({
 
   const adjustments = recommendation.adjustments || [];
   const caveats = recommendation.caveats || [];
+  const alternatives = recommendation.alternatives || [];
   const assumptions = economics?.assumptions || {};
 
   const canApply = adjustments.length > 0;
@@ -125,6 +126,7 @@ export default function RecommendationPanel({
             projection={projection}
             economics={economics}
             caveats={caveats}
+            alternatives={alternatives}
             hasApplyResult={Boolean(applyResult)}
             onOpen={setActiveView}
           />
@@ -144,6 +146,14 @@ export default function RecommendationPanel({
             economics={economics}
             confidence={recommendation.confidence}
             windowHours={windowHours}
+            onBack={() => setActiveView("summary")}
+          />
+        )}
+
+        {activeView === "alternatives" && (
+          <AlternativesView
+            alternatives={alternatives}
+            stopped={recommendation.action_type === "stop_now"}
             onBack={() => setActiveView("summary")}
           />
         )}
@@ -210,6 +220,7 @@ function RecommendationSummary({
   projection,
   economics,
   caveats,
+  alternatives,
   hasApplyResult,
   onOpen,
 }) {
@@ -285,6 +296,16 @@ function RecommendationSummary({
         >
           <span>ECONOMIC MODEL</span>
           <strong>{assumptionCount} inputs</strong>
+        </button>
+
+        <button
+          type="button"
+          className="recommendation-small-card"
+          onClick={() => onOpen("alternatives")}
+          disabled={alternatives.length === 0}
+        >
+          <span>ALTERNATIVES</span>
+          <strong>{alternatives.length}</strong>
         </button>
       </div>
 
@@ -413,6 +434,67 @@ function ImpactView({
             ? "reached"
             : "not reached"}
         </span>
+      </div>
+    </div>
+  );
+}
+
+/*
+ * The agent keeps the cheapest other options that also work. Showing them lets
+ * an operator trade output against margin instead of taking a single answer.
+ * On stop_now these are palliative only: nothing clears the fault, so they buy
+ * time without fixing it.
+ */
+function AlternativesView({ alternatives, stopped, onBack }) {
+  return (
+    <div className="recommendation-detail-view">
+      <BackButton onClick={onBack} />
+
+      <div className="recommendation-detail-heading">
+        <span>{stopped ? "NOT PRESCRIBED" : "OTHER OPTIONS"}</span>
+        <h3>
+          {stopped
+            ? "Palliative options only"
+            : "Alternative adjustments"}
+        </h3>
+      </div>
+
+      {stopped && (
+        <p className="alternatives-note">
+          None of these clears the breached limit. They buy time, they do
+          not remove the fault.
+        </p>
+      )}
+
+      <div className="alternative-list">
+        {alternatives.map((alternative) => (
+          <div
+            className="alternative-item"
+            key={alternative.description}
+          >
+            <strong>{alternative.description}</strong>
+
+            <div className="alternative-metrics">
+              <span>
+                +{Number(alternative.rul_extension_hours).toFixed(1)} h
+              </span>
+              <span>
+                Risk{" "}
+                {percent(alternative.projected_failure_probability)}
+              </span>
+              <span>
+                Output -
+                {Number(alternative.throughput_loss_pct).toFixed(1)}%
+              </span>
+            </div>
+
+            {alternative.still_violating?.length > 0 && (
+              <small>
+                Still breaches {alternative.still_violating.join(", ")}
+              </small>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
