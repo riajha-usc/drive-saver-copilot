@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
 import {
   applyAdjustment,
   getAsset,
@@ -18,7 +19,22 @@ import RecommendationPanel from "./components/RecommendationPanel";
 import RootCausePanel from "./components/RootCausePanel";
 import TelemetryCharts from "./components/TelemetryCharts";
 
+const DEFAULT_MAINTENANCE_WINDOW_HOURS = 48;
+
 export default function App() {
+  const recommendationRequestRef = useRef({
+    key: "",
+    promise: null,
+  });
+
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem(
+      "drive-saver-theme",
+    );
+
+    return savedTheme === "light" ? "light" : "dark";
+  });
+
   const [apiState, setApiState] = useState({
     status: "loading",
     health: null,
@@ -27,7 +43,8 @@ export default function App() {
   });
 
   const [datasets, setDatasets] = useState([]);
-  const [selectedDatasetId, setSelectedDatasetId] = useState("");
+  const [selectedDatasetId, setSelectedDatasetId] =
+    useState("");
   const [selectedAssetId, setSelectedAssetId] = useState("");
 
   const [assetState, setAssetState] = useState({
@@ -49,13 +66,12 @@ export default function App() {
     error: "",
   });
 
-  const [hoursToWindow, setHoursToWindow] = useState(48);
-
-  const [recommendationState, setRecommendationState] = useState({
-    status: "idle",
-    recommendation: null,
-    error: "",
-  });
+  const [recommendationState, setRecommendationState] =
+    useState({
+      status: "idle",
+      recommendation: null,
+      error: "",
+    });
 
   const [applyState, setApplyState] = useState({
     status: "idle",
@@ -63,11 +79,30 @@ export default function App() {
     error: "",
   });
 
+  const [analysisTab, setAnalysisTab] =
+    useState("root-cause");
 
+  /*
+   * Apply and remember the selected dashboard theme.
+   */
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+
+    localStorage.setItem("drive-saver-theme", theme);
+  }, [theme]);
+
+  /*
+   * Load API health, model information and datasets.
+   */
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([getHealth(), getModelInfo(), listDatasets()])
+    Promise.all([
+      getHealth(),
+      getModelInfo(),
+      listDatasets(),
+    ])
       .then(([health, model, datasetList]) => {
         if (cancelled) {
           return;
@@ -83,7 +118,9 @@ export default function App() {
         setDatasets(datasetList);
 
         if (datasetList.length > 0) {
-          setSelectedDatasetId(datasetList[0].dataset_id);
+          setSelectedDatasetId(
+            datasetList[0].dataset_id,
+          );
         }
       })
       .catch((error) => {
@@ -104,6 +141,9 @@ export default function App() {
     };
   }, []);
 
+  /*
+   * Load assets when the selected dataset changes.
+   */
   useEffect(() => {
     if (!selectedDatasetId) {
       setAssetState({
@@ -158,7 +198,7 @@ export default function App() {
   }, [selectedDatasetId]);
 
   /*
-   * Load full risk details whenever an asset is selected.
+   * Load risk details for the selected asset.
    */
   useEffect(() => {
     if (!selectedDatasetId || !selectedAssetId) {
@@ -209,7 +249,7 @@ export default function App() {
   }, [selectedDatasetId, selectedAssetId]);
 
   /*
-   * Load telemetry history whenever an asset is selected.
+   * Load telemetry for the selected asset.
    */
   useEffect(() => {
     if (!selectedDatasetId || !selectedAssetId) {
@@ -232,7 +272,11 @@ export default function App() {
       error: "",
     });
 
-    getAssetHistory(selectedDatasetId, selectedAssetId, 60)
+    getAssetHistory(
+      selectedDatasetId,
+      selectedAssetId,
+      60,
+    )
       .then((history) => {
         if (cancelled) {
           return;
@@ -264,7 +308,7 @@ export default function App() {
   }, [selectedDatasetId, selectedAssetId]);
 
   /*
-   * Clear the previous recommendation when the selected asset changes.
+   * Reset asset-specific UI when the selection changes.
    */
   useEffect(() => {
     setRecommendationState({
@@ -278,159 +322,305 @@ export default function App() {
       result: null,
       error: "",
     });
+
+    setAnalysisTab("root-cause");
   }, [selectedDatasetId, selectedAssetId]);
 
-  const selectedDataset = datasets.find(
-    (dataset) => dataset.dataset_id === selectedDatasetId,
-  );
+  /*
+   * Automatically generate a recommendation after an asset
+   * is selected.
+   */
+  useEffect(() => {
+    if (!selectedDatasetId || !selectedAssetId) {
+      recommendationRequestRef.current = {
+        key: "",
+        promise: null,
+      };
 
-  const apiStatus =
-    apiState.status === "ready" ? apiState.health?.status : "loading";
+      return;
+    }
 
-  async function handleGenerateRecommendation() {
-      if (!selectedDatasetId || !selectedAssetId) {
-        return;
-      }
+    let cancelled = false;
 
-      const hours = Number(hoursToWindow);
+    const requestKey = [
+      selectedDatasetId,
+      selectedAssetId,
+      DEFAULT_MAINTENANCE_WINDOW_HOURS,
+    ].join(":");
 
-      if (!Number.isFinite(hours) || hours <= 0 || hours > 2000) {
-        setRecommendationState({
-          status: "error",
-          recommendation: null,
-          error: "Maintenance window must be between 1 and 2000 hours.",
-        });
+    let recommendationPromise;
 
-        return;
-      }
+    if (
+      recommendationRequestRef.current.key ===
+        requestKey &&
+      recommendationRequestRef.current.promise
+    ) {
+      recommendationPromise =
+        recommendationRequestRef.current.promise;
+    } else {
+      recommendationPromise = getRecommendation(
+        selectedDatasetId,
+        selectedAssetId,
+        DEFAULT_MAINTENANCE_WINDOW_HOURS,
+      );
 
-      setRecommendationState({
-        status: "loading",
-        recommendation: null,
-        error: "",
-      });
+      recommendationRequestRef.current = {
+        key: requestKey,
+        promise: recommendationPromise,
+      };
+    }
 
-      try {
-        const recommendation = await getRecommendation(
-          selectedDatasetId,
-          selectedAssetId,
-          hours,
-        );
+    setRecommendationState({
+      status: "loading",
+      recommendation: null,
+      error: "",
+    });
+
+    recommendationPromise
+      .then((recommendation) => {
+        if (cancelled) {
+          return;
+        }
 
         setRecommendationState({
           status: "ready",
           recommendation,
           error: "",
         });
-      } catch (error) {
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
         setRecommendationState({
           status: "error",
           recommendation: null,
           error: error.message,
         });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDatasetId, selectedAssetId]);
+
+  const selectedDataset = datasets.find(
+    (dataset) =>
+      dataset.dataset_id === selectedDatasetId,
+  );
+
+  const apiStatus =
+    apiState.status === "ready"
+      ? apiState.health?.status
+      : "loading";
+
+  /*
+   * Retry recommendation generation after an API error.
+   */
+  async function handleGenerateRecommendation() {
+    if (!selectedDatasetId || !selectedAssetId) {
+      return;
+    }
+
+    setRecommendationState({
+      status: "loading",
+      recommendation: null,
+      error: "",
+    });
+
+    const requestKey = [
+      selectedDatasetId,
+      selectedAssetId,
+      DEFAULT_MAINTENANCE_WINDOW_HOURS,
+    ].join(":");
+
+    const recommendationPromise = getRecommendation(
+      selectedDatasetId,
+      selectedAssetId,
+      DEFAULT_MAINTENANCE_WINDOW_HOURS,
+    );
+
+    recommendationRequestRef.current = {
+      key: requestKey,
+      promise: recommendationPromise,
+    };
+
+    try {
+      const recommendation =
+        await recommendationPromise;
+
+      if (
+        recommendationRequestRef.current.promise !==
+        recommendationPromise
+      ) {
+        return;
       }
+
+      setRecommendationState({
+        status: "ready",
+        recommendation,
+        error: "",
+      });
+    } catch (error) {
+      if (
+        recommendationRequestRef.current.promise !==
+        recommendationPromise
+      ) {
+        return;
+      }
+
+      setRecommendationState({
+        status: "error",
+        recommendation: null,
+        error: error.message,
+      });
+    }
+  }
+
+  async function handleApplyAdjustment() {
+    if (!selectedDatasetId || !selectedAssetId) {
+      return;
     }
 
-    async function handleApplyAdjustment() {
-        if (!selectedDatasetId || !selectedAssetId) {
-          return;
-        }
+    setApplyState({
+      status: "loading",
+      result: null,
+      error: "",
+    });
 
-        setApplyState({
-          status: "loading",
-          result: null,
-          error: "",
-        });
+    try {
+      const result = await applyAdjustment(
+        selectedDatasetId,
+        selectedAssetId,
+        DEFAULT_MAINTENANCE_WINDOW_HOURS,
+      );
 
-        try {
-          const result = await applyAdjustment(
-            selectedDatasetId,
-            selectedAssetId,
-            Number(hoursToWindow),
-          );
-
-          setApplyState({
-            status: "ready",
-            result,
-            error: "",
-          });
-        } catch (error) {
-          setApplyState({
-            status: "error",
-            result: null,
-            error: error.message,
-          });
-        }
+      setApplyState({
+        status: "ready",
+        result,
+        error: "",
+      });
+    } catch (error) {
+      setApplyState({
+        status: "error",
+        result: null,
+        error: error.message,
+      });
     }
+  }
+
+  function handleThemeToggle() {
+    setTheme((currentTheme) =>
+      currentTheme === "dark" ? "light" : "dark",
+    );
+  }
+
+  function renderDatasetWorkspace() {
+    return (
+      <>
+        <p className="section-label">
+          AVAILABLE DATASETS
+        </p>
+
+        <div className="dataset-list">
+          {datasets.length === 0 && (
+            <p className="empty-message">
+              No datasets available.
+            </p>
+          )}
+
+          {datasets.map((dataset) => (
+            <button
+              type="button"
+              key={dataset.dataset_id}
+              className={`dataset-option ${
+                selectedDatasetId === dataset.dataset_id
+                  ? "selected"
+                  : ""
+              }`}
+              onClick={() =>
+                setSelectedDatasetId(dataset.dataset_id)
+              }
+            >
+              <span>{dataset.name}</span>
+
+              <small>
+                {dataset.row_count.toLocaleString()} rows
+              </small>
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
 
   return (
     <div className="app">
-      <DashboardHeader apiStatus={apiStatus} />
+      <DashboardHeader
+        apiStatus={apiStatus}
+        theme={theme}
+        onThemeToggle={handleThemeToggle}
+      />
 
       {apiState.status === "error" && (
         <div className="global-error">
-          Could not connect to the local API: {apiState.error}
+          Could not connect to the local API:{" "}
+          {apiState.error}
         </div>
       )}
 
       <main className="dashboard-grid">
         <aside className="left-column">
           <Panel title="AGENT ACTIVITY LOG">
-            <p className="section-label">BACKGROUND PROCESSES</p>
+            <p className="section-label">
+              BACKGROUND PROCESSES
+            </p>
 
             <div className="status-list">
               <StatusRow
                 label="API connection"
-                value={apiState.status === "ready" ? "Active" : "Waiting"}
+                value={
+                  apiState.status === "ready"
+                    ? "Active"
+                    : "Waiting"
+                }
                 active={apiState.status === "ready"}
               />
 
               <StatusRow
                 label="Failure model"
-                value={apiState.health?.model_loaded ? "Active" : "Idle"}
+                value={
+                  apiState.health?.model_loaded
+                    ? "Active"
+                    : "Idle"
+                }
                 active={apiState.health?.model_loaded}
               />
 
               <StatusRow
                 label="Recommendation agent"
-                value={apiState.health?.model_loaded ? "Ready" : "Idle"}
+                value={
+                  apiState.health?.model_loaded
+                    ? "Ready"
+                    : "Idle"
+                }
                 active={apiState.health?.model_loaded}
               />
             </div>
           </Panel>
 
-          <Panel title="DATASET WORKSPACE">
-            <p className="section-label">AVAILABLE DATASETS</p>
-
-            <div className="dataset-list">
-              {datasets.length === 0 && (
-                <p className="empty-message">No datasets available.</p>
-              )}
-
-              {datasets.map((dataset) => (
-                <button
-                  key={dataset.dataset_id}
-                  className={`dataset-option ${
-                    selectedDatasetId === dataset.dataset_id ? "selected" : ""
-                  }`}
-                  onClick={() => setSelectedDatasetId(dataset.dataset_id)}
-                >
-                  <span>{dataset.name}</span>
-
-                  <small>
-                    {dataset.row_count.toLocaleString()} rows
-                  </small>
-                </button>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="ASSET SELECTION">
+          <Panel
+            title="ASSET SELECTION"
+            className="asset-selection-panel"
+          >
             <AssetTable
               assets={assetState.assets}
               selectedAssetId={selectedAssetId}
               onSelect={setSelectedAssetId}
-              loading={assetState.status === "loading"}
+              loading={
+                assetState.status === "loading"
+              }
               error={assetState.error}
             />
           </Panel>
@@ -444,44 +634,122 @@ export default function App() {
                 : "MOTOR HEALTH OVERVIEW"
             }
             className={`health-panel ${
-              assetDetailState.detail?.asset?.risk_band ?? ""
+              assetDetailState.detail?.asset
+                ?.risk_band ?? ""
             }`}
           >
             <AssetHealth
               detail={assetDetailState.detail}
-              loading={assetDetailState.status === "loading"}
+              loading={
+                assetDetailState.status === "loading"
+              }
               error={assetDetailState.error}
               hasSelection={Boolean(selectedAssetId)}
             />
           </Panel>
 
           <Panel
-            title="TELEMETRY HISTORY"
-            className="telemetry-panel"
+            title="ASSET ANALYSIS"
+            className="analysis-panel"
           >
-            <TelemetryCharts
-              points={historyState.points}
-              note={historyState.note}
-              loading={historyState.status === "loading"}
-              error={historyState.error}
-              hasSelection={Boolean(selectedAssetId)}
-            />
+            <div
+              className="analysis-tabs"
+              role="tablist"
+              aria-label="Asset analysis views"
+            >
+              <button
+                type="button"
+                id="root-cause-tab"
+                role="tab"
+                aria-selected={
+                  analysisTab === "root-cause"
+                }
+                aria-controls="root-cause-view"
+                className={`analysis-tab ${
+                  analysisTab === "root-cause"
+                    ? "active"
+                    : ""
+                }`}
+                onClick={() =>
+                  setAnalysisTab("root-cause")
+                }
+              >
+                ROOT CAUSE
+              </button>
+
+              <button
+                type="button"
+                id="telemetry-tab"
+                role="tab"
+                aria-selected={
+                  analysisTab === "telemetry"
+                }
+                aria-controls="telemetry-view"
+                className={`analysis-tab ${
+                  analysisTab === "telemetry"
+                    ? "active"
+                    : ""
+                }`}
+                onClick={() =>
+                  setAnalysisTab("telemetry")
+                }
+              >
+                TELEMETRY HISTORY
+              </button>
+            </div>
+
+            <div className="analysis-panel-content">
+              {analysisTab === "root-cause" && (
+                <div
+                  id="root-cause-view"
+                  className="analysis-tab-view"
+                  role="tabpanel"
+                  aria-labelledby="root-cause-tab"
+                >
+                  <RootCausePanel
+                    detail={assetDetailState.detail}
+                    loading={
+                      assetDetailState.status ===
+                      "loading"
+                    }
+                    error={assetDetailState.error}
+                    hasSelection={Boolean(
+                      selectedAssetId,
+                    )}
+                  />
+                </div>
+              )}
+
+              {analysisTab === "telemetry" && (
+                <div
+                  id="telemetry-view"
+                  className="analysis-tab-view"
+                  role="tabpanel"
+                  aria-labelledby="telemetry-tab"
+                >
+                  <TelemetryCharts
+                    points={historyState.points}
+                    note={historyState.note}
+                    loading={
+                      historyState.status === "loading"
+                    }
+                    error={historyState.error}
+                    hasSelection={Boolean(
+                      selectedAssetId,
+                    )}
+                  />
+                </div>
+              )}
+            </div>
           </Panel>
 
           <Panel
-            title="ROOT CAUSE ANALYSIS"
-            className="root-cause-panel"
+            title="MODEL SANDBOX"
+            className="sandbox-panel"
           >
-            <RootCausePanel
-              detail={assetDetailState.detail}
-              loading={assetDetailState.status === "loading"}
-              error={assetDetailState.error}
-              hasSelection={Boolean(selectedAssetId)}
-            />
-          </Panel>
-
-          <Panel title="MODEL SANDBOX" className="sandbox-panel">
-            <p className="section-label">ANALYSIS PIPELINE</p>
+            <p className="section-label">
+              ANALYSIS PIPELINE
+            </p>
 
             <div className="timeline">
               <TimelineStep
@@ -499,14 +767,19 @@ export default function App() {
               <TimelineStep
                 number="3"
                 label="Risk Analysis"
-                active={assetDetailState.status === "ready"}
+                active={
+                  assetDetailState.status === "ready"
+                }
               />
 
               <TimelineStep
                 number="4"
                 label="Recommendation"
-                active={recommendationState.status === "ready"}
+                active={
+                  recommendationState.status === "ready"
+                }
               />
+
               <TimelineStep
                 number="5"
                 label="Adjustment"
@@ -524,7 +797,8 @@ export default function App() {
 
               <span>
                 Assets at risk:{" "}
-                {selectedDataset?.at_risk_count ?? "--"}
+                {selectedDataset?.at_risk_count ??
+                  "--"}
               </span>
             </div>
           </Panel>
@@ -538,16 +812,25 @@ export default function App() {
             <RecommendationPanel
               assetId={selectedAssetId}
               status={recommendationState.status}
-              recommendation={recommendationState.recommendation}
+              recommendation={
+                recommendationState.recommendation
+              }
               error={recommendationState.error}
-              hoursToWindow={hoursToWindow}
-              onHoursChange={setHoursToWindow}
-              onGenerate={handleGenerateRecommendation}
+              onGenerate={
+                handleGenerateRecommendation
+              }
               applyStatus={applyState.status}
               applyResult={applyState.result}
               applyError={applyState.error}
               onApply={handleApplyAdjustment}
             />
+          </Panel>
+
+          <Panel
+            title="DATASET WORKSPACE"
+            className="right-dataset-panel"
+          >
+            {renderDatasetWorkspace()}
           </Panel>
         </aside>
       </main>
@@ -560,16 +843,26 @@ function StatusRow({ label, value, active }) {
     <div className="status-row">
       <span>{label}</span>
 
-      <strong className={active ? "active-text" : ""}>
+      <strong
+        className={active ? "active-text" : ""}
+      >
         {value}
       </strong>
     </div>
   );
 }
 
-function TimelineStep({ number, label, active = false }) {
+function TimelineStep({
+  number,
+  label,
+  active = false,
+}) {
   return (
-    <div className={`timeline-step ${active ? "active" : ""}`}>
+    <div
+      className={`timeline-step ${
+        active ? "active" : ""
+      }`}
+    >
       <div className="timeline-number">{number}</div>
       <span>{label}</span>
     </div>

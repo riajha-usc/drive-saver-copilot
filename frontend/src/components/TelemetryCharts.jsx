@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -23,6 +24,8 @@ export default function TelemetryCharts({
   error,
   hasSelection,
 }) {
+  const [expandedChart, setExpandedChart] = useState(null);
+
   if (!hasSelection) {
     return (
       <div className="telemetry-state">
@@ -39,76 +42,149 @@ export default function TelemetryCharts({
     return <div className="telemetry-state error-text">{error}</div>;
   }
 
-  if (points.length === 0) {
+  if (!points || points.length === 0) {
     return (
-      <div className="telemetry-state">No telemetry history available.</div>
+      <div className="telemetry-state">
+        No telemetry history available.
+      </div>
     );
   }
 
+  function toggleChart(chartName) {
+    setExpandedChart((currentChart) =>
+      currentChart === chartName ? null : chartName
+    );
+  }
+
+  function handleKeyboard(event, chartName) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggleChart(chartName);
+    }
+  }
+
+  const showTemperature =
+    expandedChart === null || expandedChart === "temperature";
+
+  const showSpeed =
+    expandedChart === null || expandedChart === "speed";
+
+  const showTorque =
+    expandedChart === null || expandedChart === "torque";
+
   return (
-    <div className="telemetry-charts">
-      <ChartCard title="TEMPERATURE" unit="K">
-        <LineChart data={points}>
-          <ChartBase />
+    <div
+      className={`telemetry-charts ${
+        expandedChart ? "telemetry-charts-expanded" : ""
+      }`}
+    >
+      {showTemperature && (
+        <ChartCard
+          title="TEMPERATURE"
+          unit="K"
+          expanded={expandedChart === "temperature"}
+          onClick={() => toggleChart("temperature")}
+          onKeyDown={(event) => handleKeyboard(event, "temperature")}
+        >
+          <LineChart data={points}>
+            <ChartBase />
 
-          <Line
-            type="monotone"
-            dataKey="air_temperature"
-            name="Air temperature"
-            stroke="#bdbdbd"
-            strokeWidth={2}
-            dot={false}
-          />
+            <Line
+              type="monotone"
+              dataKey="air_temperature"
+              name="Air temperature"
+              stroke="#bdbdbd"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
 
-          <Line
-            type="monotone"
-            dataKey="process_temperature"
-            name="Process temperature"
-            stroke="#ff4d40"
-            strokeWidth={2}
-            dot={false}
-          />
-        </LineChart>
-      </ChartCard>
+            <Line
+              type="monotone"
+              dataKey="process_temperature"
+              name="Process temperature"
+              stroke="#ff4d40"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          </LineChart>
+        </ChartCard>
+      )}
 
-      <ChartCard title="ROTATIONAL SPEED" unit="RPM">
-        <LineChart data={points}>
-          <ChartBase />
+      {showSpeed && (
+        <ChartCard
+          title="ROTATIONAL SPEED"
+          unit="RPM"
+          expanded={expandedChart === "speed"}
+          onClick={() => toggleChart("speed")}
+          onKeyDown={(event) => handleKeyboard(event, "speed")}
+        >
+          <LineChart data={points}>
+            <ChartBase />
 
-          <Line
-            type="monotone"
-            dataKey="rotational_speed"
-            name="Speed"
-            stroke="#ff4d40"
-            strokeWidth={2}
-            dot={false}
-          />
-        </LineChart>
-      </ChartCard>
+            <Line
+              type="monotone"
+              dataKey="rotational_speed"
+              name="Speed"
+              stroke="#ff4d40"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          </LineChart>
+        </ChartCard>
+      )}
 
-      <ChartCard title="TORQUE" unit="Nm">
-        <LineChart data={points}>
-          <ChartBase />
+      {showTorque && (
+        <ChartCard
+          title="TORQUE"
+          unit="Nm"
+          expanded={expandedChart === "torque"}
+          onClick={() => toggleChart("torque")}
+          onKeyDown={(event) => handleKeyboard(event, "torque")}
+        >
+          <LineChart data={points}>
+            <ChartBase />
 
-          <Line
-            type="monotone"
-            dataKey="torque"
-            name="Torque"
-            stroke="#f5a623"
-            strokeWidth={2}
-            dot={false}
-          />
-        </LineChart>
-      </ChartCard>
+            <Line
+              type="monotone"
+              dataKey="torque"
+              name="Torque"
+              stroke="#f5a623"
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4 }}
+            />
+          </LineChart>
+        </ChartCard>
+      )}
 
       {note && <p className="telemetry-note">{note}</p>}
     </div>
   );
 }
 
-function ChartCard({ title, unit, children }) {
+function ChartCard({
+  title,
+  unit,
+  expanded,
+  onClick,
+  onKeyDown,
+  children,
+}) {
   return (
-    <div className="telemetry-chart-card">
+    <div
+      className={`telemetry-chart-card ${
+        expanded ? "telemetry-chart-card-expanded" : ""
+      }`}
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      aria-label={`${expanded ? "Collapse" : "Expand"} ${title} chart`}
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+    >
       <div className="telemetry-chart-title">
         <strong>{title}</strong>
         <span>{unit}</span>
@@ -119,6 +195,7 @@ function ChartCard({ title, unit, children }) {
           {children}
         </ResponsiveContainer>
       </div>
+
     </div>
   );
 }
@@ -142,7 +219,10 @@ function ChartBase() {
         tickLine={false}
       />
 
-      <Tooltip contentStyle={tooltipStyle} />
+      <Tooltip
+        contentStyle={tooltipStyle}
+        labelStyle={{ color: "#bdbdbd" }}
+      />
 
       <Legend
         wrapperStyle={{

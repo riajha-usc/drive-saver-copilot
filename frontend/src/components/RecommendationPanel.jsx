@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -13,101 +15,315 @@ export default function RecommendationPanel({
   status,
   recommendation,
   error,
-  hoursToWindow,
-  onHoursChange,
   onGenerate,
   applyStatus,
   applyResult,
   applyError,
   onApply,
 }) {
+  const [activeView, setActiveView] = useState("summary");
+
+  /*
+   * Return to the recommendation summary when the selected
+   * asset or recommendation changes.
+   */
+  useEffect(() => {
+    setActiveView("summary");
+  }, [assetId, recommendation]);
+
+  /*
+   * Automatically open the simulated result after an
+   * adjustment is recorded.
+   */
+  useEffect(() => {
+    if (applyResult) {
+      setActiveView("applied");
+    }
+  }, [applyResult]);
+
   if (!assetId) {
-    return (
-      <div className="recommendation-empty">
-        <div className="agent-message">
-          <div className="agent-avatar">●</div>
-          <p>Select a motor asset to begin prescriptive analysis.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === "loading") {
-    return (
-      <div className="recommendation-state">
-        <div className="recommendation-spinner" />
-        <strong>Running counterfactual simulations...</strong>
-        <p>Testing safe torque and speed adjustments.</p>
-      </div>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <div className="recommendation-state">
-        <p className="error-text">{error}</p>
-
-        <button className="generate-button" onClick={onGenerate}>
-          Try Again
-        </button>
-      </div>
-    );
-  }
-
-  if (!recommendation) {
     return (
       <div className="recommendation-empty">
         <div className="agent-message">
           <div className="agent-avatar">●</div>
 
           <p>
-            {assetId} is ready. Run the agent to calculate a safe adjustment.
+            Select a motor asset to begin prescriptive
+            analysis.
           </p>
         </div>
+      </div>
+    );
+  }
 
-        <label className="maintenance-window">
-          <span>Hours until planned maintenance</span>
+  /*
+   * Show API errors before checking for an empty recommendation.
+   */
+  if (status === "error") {
+    return (
+      <div className="recommendation-state">
+        <p className="error-text">
+          {error || "Could not generate a recommendation."}
+        </p>
 
-          <input
-                       type="number"
-            min="1"
-            max="2000"
-            value={hoursToWindow}
-            onChange={(event) => onHoursChange(event.target.value)}
-          />
-        </label>
-
-        <button className="generate-button" onClick={onGenerate}>
-          GET RECOMMENDATION
+        <button
+          type="button"
+          className="generate-button"
+          onClick={onGenerate}
+        >
+          TRY AGAIN
         </button>
       </div>
     );
   }
 
-  const { narrative, adjustments, projection, economics } = recommendation;
+  /*
+   * App.jsx automatically requests the recommendation.
+   * Therefore, no Get Recommendation button is needed here.
+   */
+  if (status === "loading" || !recommendation) {
+    return (
+      <div className="recommendation-state">
+        <div className="recommendation-spinner" />
+
+        <strong>Generating recommendation...</strong>
+
+        <p>
+          Testing safe torque and speed adjustments for{" "}
+          {assetId}.
+        </p>
+      </div>
+    );
+  }
+
+  const { narrative, projection, economics } =
+    recommendation;
+
+  const adjustments = recommendation.adjustments || [];
+  const caveats = recommendation.caveats || [];
+  const assumptions = economics?.assumptions || {};
+
   const canApply = adjustments.length > 0;
   const applyCompleted = applyStatus === "ready";
 
   return (
-    <div className="recommendation-result">
-      <div className="recommendation-headline">
+    <div className="recommendation-workspace">
+      <div className="recommendation-workspace-header">
         <span className="action-badge">
           {recommendation.action_type.replaceAll("_", " ")}
         </span>
 
-        <h3>{narrative.headline}</h3>
-        <p>{narrative.explanation}</p>
+        <strong>{narrative.headline}</strong>
+      </div>
+
+      <div className="recommendation-view">
+        {activeView === "summary" && (
+          <RecommendationSummary
+            narrative={narrative}
+            adjustments={adjustments}
+            projection={projection}
+            economics={economics}
+            caveats={caveats}
+            hasApplyResult={Boolean(applyResult)}
+            onOpen={setActiveView}
+          />
+        )}
+
+        {activeView === "adjustment" && (
+          <AdjustmentView
+            adjustments={adjustments}
+            narrative={narrative}
+            onBack={() => setActiveView("summary")}
+          />
+        )}
+
+        {activeView === "impact" && (
+          <ImpactView
+            projection={projection}
+            economics={economics}
+            confidence={recommendation.confidence}
+            onBack={() => setActiveView("summary")}
+          />
+        )}
+
+        {activeView === "caveats" && (
+          <CaveatsView
+            caveats={caveats}
+            onBack={() => setActiveView("summary")}
+          />
+        )}
+
+        {activeView === "economics" && (
+          <EconomicsView
+            assumptions={assumptions}
+            economics={economics}
+            onBack={() => setActiveView("summary")}
+          />
+        )}
+
+        {activeView === "applied" && applyResult && (
+          <div className="recommendation-detail-view">
+            <BackButton
+              onClick={() => setActiveView("summary")}
+            />
+
+            <ApplyResult result={applyResult} />
+          </div>
+        )}
+      </div>
+
+      <div className="recommendation-footer">
+        {applyError && (
+          <div className="apply-error">
+            {applyError}
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="implement-button"
+          onClick={onApply}
+          disabled={
+            !canApply ||
+            applyStatus === "loading" ||
+            applyCompleted
+          }
+        >
+          {applyStatus === "loading"
+            ? "RECORDING ADJUSTMENT..."
+            : applyCompleted
+              ? "ADJUSTMENT RECORDED"
+              : canApply
+                ? "VET & IMPLEMENT ADJUSTMENT"
+                : "NO ADJUSTMENT AVAILABLE"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RecommendationSummary({
+  narrative,
+  adjustments,
+  projection,
+  economics,
+  caveats,
+  hasApplyResult,
+  onOpen,
+}) {
+  const assumptionCount = Object.keys(
+    economics?.assumptions || {},
+  ).length;
+
+  return (
+    <div className="recommendation-summary">
+      <p className="recommendation-summary-text">
+        {narrative.explanation}
+      </p>
+
+      <button
+        type="button"
+        className="recommendation-summary-card adjustment-summary"
+        onClick={() => onOpen("adjustment")}
+      >
+        <div>
+          <span>PRESCRIBED ADJUSTMENT</span>
+
+          <strong>
+            {adjustments.length > 0
+              ? `${adjustments.length} setpoint ${
+                  adjustments.length === 1
+                    ? "change"
+                    : "changes"
+                }`
+              : "No adjustment"}
+          </strong>
+        </div>
+
+        <small>VIEW DETAILS</small>
+      </button>
+
+      <button
+        type="button"
+        className="recommendation-summary-card impact-summary"
+        onClick={() => onOpen("impact")}
+      >
+        <div>
+          <span>PROJECTED IMPACT</span>
+
+          <strong>
+            +{projection.rul_extension_hours.toFixed(1)}{" "}
+            hours
+          </strong>
+        </div>
+
+        <div className="summary-secondary-value">
+          <span>Net benefit</span>
+
+          <strong>
+            {currency.format(economics.net_benefit_usd)}
+          </strong>
+        </div>
+      </button>
+
+      <div className="recommendation-summary-grid">
+        <button
+          type="button"
+          className="recommendation-small-card"
+          onClick={() => onOpen("caveats")}
+        >
+          <span>CAVEATS</span>
+          <strong>{caveats.length}</strong>
+        </button>
+
+        <button
+          type="button"
+          className="recommendation-small-card"
+          onClick={() => onOpen("economics")}
+        >
+          <span>ECONOMIC MODEL</span>
+          <strong>{assumptionCount} inputs</strong>
+        </button>
+      </div>
+
+      {hasApplyResult && (
+        <button
+          type="button"
+          className="recommendation-recorded-card"
+          onClick={() => onOpen("applied")}
+        >
+          <span>ADJUSTMENT RECORDED</span>
+          <strong>View simulated result</strong>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AdjustmentView({
+  adjustments,
+  narrative,
+  onBack,
+}) {
+  return (
+    <div className="recommendation-detail-view">
+      <BackButton onClick={onBack} />
+
+      <div className="recommendation-detail-heading">
+        <span>PRESCRIBED ADJUSTMENT</span>
+        <h3>Recommended setpoint changes</h3>
       </div>
 
       <div className="adjustment-card">
-        <h4>PRESCRIBED ADJUSTMENT</h4>
-
         {adjustments.length === 0 && (
           <p>No setpoint adjustment is recommended.</p>
         )}
 
         {adjustments.map((adjustment) => (
-          <div className="adjustment-row" key={adjustment.parameter}>
+          <div
+            className="adjustment-row"
+            key={adjustment.parameter}
+          >
             <div>
               <strong>{adjustment.label}</strong>
               <span>{adjustment.unit}</span>
@@ -116,10 +332,14 @@ export default function RecommendationPanel({
             <div className="adjustment-values">
               <span>{adjustment.current_value}</span>
               <b>→</b>
-              <strong>{adjustment.recommended_value}</strong>
+              <strong>
+                {adjustment.recommended_value}
+              </strong>
             </div>
 
-            <small>{adjustment.change_pct.toFixed(1)}%</small>
+            <small>
+              {adjustment.change_pct.toFixed(1)}%
+            </small>
           </div>
         ))}
 
@@ -127,85 +347,149 @@ export default function RecommendationPanel({
           {narrative.operator_instruction}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ImpactView({
+  projection,
+  economics,
+  confidence,
+  onBack,
+}) {
+  return (
+    <div className="recommendation-detail-view">
+      <BackButton onClick={onBack} />
+
+      <div className="recommendation-detail-heading">
+        <span>PROJECTED IMPACT</span>
+        <h3>Expected operational outcome</h3>
+      </div>
 
       <div className="projection-card">
         <Metric
           label="Projected RUL extension"
-          value={`+${projection.rul_extension_hours.toFixed(1)} hours`}
+          value={`+${projection.rul_extension_hours.toFixed(
+            1,
+          )} hours`}
         />
 
         <Metric
           label="Failure risk"
-          value={`${percent(projection.baseline_failure_probability)} → ${percent(
+          value={`${percent(
+            projection.baseline_failure_probability,
+          )} → ${percent(
             projection.projected_failure_probability,
           )}`}
         />
 
         <Metric
           label="Throughput loss"
-          value={`${projection.throughput_loss_pct.toFixed(1)}%`}
+          value={`${projection.throughput_loss_pct.toFixed(
+            1,
+          )}%`}
         />
 
         <Metric
           label="Net economic benefit"
-          value={currency.format(economics.net_benefit_usd)}
+          value={currency.format(
+            economics.net_benefit_usd,
+          )}
         />
       </div>
 
       <div className="recommendation-meta">
         <span>
-          Confidence: {(recommendation.confidence * 100).toFixed(0)}%
+          Confidence: {(confidence * 100).toFixed(0)}%
         </span>
 
         <span>
           Maintenance window:{" "}
-          {projection.reaches_maintenance_window ? "Reached" : "Not reached"}
+          {projection.reaches_maintenance_window
+            ? "Reached"
+            : "Not reached"}
         </span>
       </div>
+    </div>
+  );
+}
 
-      {recommendation.caveats.length > 0 && (
-        <div className="caveat-box">
-          <strong>Caveats</strong>
+function CaveatsView({ caveats, onBack }) {
+  return (
+    <div className="recommendation-detail-view">
+      <BackButton onClick={onBack} />
 
+      <div className="recommendation-detail-heading">
+        <span>CAUTION</span>
+        <h3>Recommendation caveats</h3>
+      </div>
+
+      <div className="caveat-box">
+        {caveats.length > 0 ? (
           <ul>
-            {recommendation.caveats.map((caveat) => (
+            {caveats.map((caveat) => (
               <li key={caveat}>{caveat}</li>
             ))}
           </ul>
-        </div>
-      )}
-
-      <details className="economics-details">
-        <summary>Economic assumptions</summary>
-
-        <div>
-          {Object.entries(economics.assumptions).map(([name, value]) => (
-            <p key={name}>
-              <span>{name.replaceAll("_", " ")}</span>
-              <strong>{value}</strong>
-            </p>
-          ))}
-        </div>
-      </details>
-
-      {applyError && <div className="apply-error">{applyError}</div>}
-
-      {applyResult && <ApplyResult result={applyResult} />}
-
-      <button
-        className="implement-button"
-        onClick={onApply}
-        disabled={!canApply || applyStatus === "loading" || applyCompleted}
-      >
-        {applyStatus === "loading"
-          ? "RECORDING ADJUSTMENT..."
-          : applyCompleted
-            ? "ADJUSTMENT RECORDED"
-            : canApply
-              ? "VET & IMPLEMENT ADJUSTMENT"
-              : "NO ADJUSTMENT AVAILABLE"}
-      </button>
+        ) : (
+          <p>
+            No caveats were returned for this
+            recommendation.
+          </p>
+        )}
+      </div>
     </div>
+  );
+}
+
+function EconomicsView({
+  assumptions,
+  economics,
+  onBack,
+}) {
+  return (
+    <div className="recommendation-detail-view">
+      <BackButton onClick={onBack} />
+
+      <div className="recommendation-detail-heading">
+        <span>ECONOMIC MODEL</span>
+        <h3>Benefit assumptions</h3>
+      </div>
+
+      <div className="economics-summary">
+        <span>Net economic benefit</span>
+
+        <strong>
+          {currency.format(economics.net_benefit_usd)}
+        </strong>
+      </div>
+
+      <div className="economics-assumption-list">
+        {Object.entries(assumptions).map(
+          ([name, value]) => (
+            <div key={name}>
+              <span>
+                {name.replaceAll("_", " ")}
+              </span>
+
+              <strong>{String(value)}</strong>
+            </div>
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BackButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      className="recommendation-back-button"
+      onClick={onClick}
+    >
+      ← BACK TO SUMMARY
+    </button>
   );
 }
 
@@ -231,8 +515,12 @@ function ApplyResult({ result }) {
 
       <Comparison
         label="Failure probability"
-        before={percent(result.failure_probability_before)}
-        after={percent(result.failure_probability_after)}
+        before={percent(
+          result.failure_probability_before,
+        )}
+        after={percent(
+          result.failure_probability_after,
+        )}
       />
 
       <Comparison
@@ -241,7 +529,9 @@ function ApplyResult({ result }) {
         after={`${result.rul_hours_after} hours`}
       />
 
-      <p className="applied-note">{result.applied_note}</p>
+      <p className="applied-note">
+        {result.applied_note}
+      </p>
     </div>
   );
 }
