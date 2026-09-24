@@ -15,6 +15,7 @@ import AssetFilters from "./components/AssetFilters";
 import AssetHealth from "./components/AssetHealth";
 import AssetTable from "./components/AssetTable";
 import DashboardHeader from "./components/DashboardHeader";
+import MaintenanceWindowControl from "./components/MaintenanceWindowControl";
 import Panel from "./components/Panel";
 import RecommendationPanel from "./components/RecommendationPanel";
 import RootCausePanel from "./components/RootCausePanel";
@@ -562,6 +563,20 @@ export default function App() {
     }
   }
 
+  /*
+   * A recorded adjustment was computed for the old window, so it no longer
+   * describes the prescription on screen.
+   */
+  function handleWindowChange(hours) {
+    setWindowHours(hours);
+
+    setApplyState({
+      status: "idle",
+      result: null,
+      error: "",
+    });
+  }
+
   async function handleLoadMoreAssets() {
     if (!selectedDatasetId || assetState.loadingMore) {
       return;
@@ -947,6 +962,14 @@ export default function App() {
             title="AGENTIC RECOMMENDATION ENGINE"
             className="recommendation-panel"
           >
+            <MaintenanceWindowControl
+              value={windowHours}
+              onChange={handleWindowChange}
+              disabled={
+                recommendationState.status === "loading"
+              }
+            />
+
             <RecommendationPanel
               assetId={selectedAssetId}
               status={recommendationState.status}
@@ -961,6 +984,7 @@ export default function App() {
               applyResult={applyState.result}
               applyError={applyState.error}
               onApply={handleApplyAdjustment}
+              windowHours={windowHours}
             />
           </Panel>
 

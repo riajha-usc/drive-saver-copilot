@@ -2724,6 +2724,115 @@ html[data-theme="light"] .recommendation-view::-webkit-scrollbar-thumb {
 }
 
 /* ------------------------------------------------------------------ */
+/* Maintenance window control                                          */
+/* ------------------------------------------------------------------ */
+
+.window-control {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.window-control-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.window-control-label span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+}
+
+.window-control-label small {
+  color: var(--muted);
+  font-size: 9px;
+  opacity: 0.8;
+}
+
+.window-control-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.window-presets {
+  display: flex;
+  gap: 4px;
+}
+
+.window-preset {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.window-preset:hover:not(:disabled),
+.window-preset.active {
+  border-color: var(--abb-red);
+  color: var(--text);
+}
+
+.window-preset.active {
+  background: var(--abb-dark-red);
+}
+
+.window-preset:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.window-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.window-input:focus-within {
+  border-color: var(--abb-red);
+}
+
+.window-input.invalid {
+  border-color: var(--abb-red);
+}
+
+.window-input input {
+  width: 52px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.window-error {
+  margin: 0;
+  color: var(--abb-red);
+  font-size: 9px;
+}
+
+/* ------------------------------------------------------------------ */
 /* Asset filters and paging                                            */
 /* ------------------------------------------------------------------ */
 

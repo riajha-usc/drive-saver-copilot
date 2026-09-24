@@ -20,6 +20,7 @@ export default function RecommendationPanel({
   applyResult,
   applyError,
   onApply,
+  windowHours,
 }) {
   const [activeView, setActiveView] = useState("summary");
 
@@ -142,6 +143,7 @@ export default function RecommendationPanel({
             projection={projection}
             economics={economics}
             confidence={recommendation.confidence}
+            windowHours={windowHours}
             onBack={() => setActiveView("summary")}
           />
         )}
@@ -355,6 +357,7 @@ function ImpactView({
   projection,
   economics,
   confidence,
+  windowHours,
   onBack,
 }) {
   return (
@@ -404,10 +407,11 @@ function ImpactView({
         </span>
 
         <span>
-          Maintenance window:{" "}
+          {windowHours ?? projection.hours_to_maintenance_window}{" "}
+          hour window:{" "}
           {projection.reaches_maintenance_window
-            ? "Reached"
-            : "Not reached"}
+            ? "reached"
+            : "not reached"}
         </span>
       </div>
     </div>
