@@ -18,6 +18,7 @@ import AssetTable from "./components/AssetTable";
 import DashboardHeader from "./components/DashboardHeader";
 import DatasetUploader from "./components/DatasetUploader";
 import MaintenanceWindowControl from "./components/MaintenanceWindowControl";
+import ModelComparison from "./components/ModelComparison";
 import Panel from "./components/Panel";
 import RecommendationPanel from "./components/RecommendationPanel";
 import RootCausePanel from "./components/RootCausePanel";
@@ -883,6 +884,20 @@ export default function App() {
               >
                 TELEMETRY HISTORY
               </button>
+
+              <button
+                type="button"
+                id="models-tab"
+                role="tab"
+                aria-selected={analysisTab === "models"}
+                aria-controls="models-view"
+                className={`analysis-tab ${
+                  analysisTab === "models" ? "active" : ""
+                }`}
+                onClick={() => setAnalysisTab("models")}
+              >
+                MODELS
+              </button>
             </div>
 
             <div className="analysis-panel-content">
@@ -926,6 +941,17 @@ export default function App() {
                     )}
                     theme={theme}
                   />
+                </div>
+              )}
+
+              {analysisTab === "models" && (
+                <div
+                  id="models-view"
+                  className="analysis-tab-view"
+                  role="tabpanel"
+                  aria-labelledby="models-tab"
+                >
+                  <ModelComparison model={apiState.model} />
                 </div>
               )}
             </div>
