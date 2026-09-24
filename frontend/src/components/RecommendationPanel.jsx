@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import MaintenanceTimeline from "./MaintenanceTimeline";
+
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
@@ -121,6 +123,7 @@ export default function RecommendationPanel({
       <div className="recommendation-view">
         {activeView === "summary" && (
           <RecommendationSummary
+            actionType={recommendation.action_type}
             narrative={narrative}
             adjustments={adjustments}
             projection={projection}
@@ -214,7 +217,29 @@ export default function RecommendationPanel({
   );
 }
 
+/*
+ * One line per prescribed change, readable without opening the detail view.
+ * A tool change is a maintenance action rather than a setpoint, so it reads as
+ * an instruction instead of "205 -> 0 min".
+ */
+function adjustmentLine(adjustment) {
+  if (adjustment.parameter === "tool_wear") {
+    return "Replace the tool at the next line stop";
+  }
+
+  const sign = adjustment.change_pct > 0 ? "+" : "";
+  return `${adjustment.label}: ${adjustment.current_value} → ${
+    adjustment.recommended_value
+  } ${adjustment.unit} (${sign}${adjustment.change_pct.toFixed(1)}%)`;
+}
+
+const NO_ADJUSTMENT_TEXT = {
+  no_action: "Hold current setpoints",
+  stop_now: "Stop the asset for repair",
+};
+
 function RecommendationSummary({
+  actionType,
   narrative,
   adjustments,
   projection,
@@ -230,9 +255,11 @@ function RecommendationSummary({
 
   return (
     <div className="recommendation-summary">
-      <p className="recommendation-summary-text">
-        {narrative.explanation}
-      </p>
+      <MaintenanceTimeline
+        projection={projection}
+        actionType={actionType}
+      />
+
 
       <button
         type="button"
@@ -242,18 +269,22 @@ function RecommendationSummary({
         <div>
           <span>PRESCRIBED ADJUSTMENT</span>
 
-          <strong>
-            {adjustments.length > 0
-              ? `${adjustments.length} setpoint ${
-                  adjustments.length === 1
-                    ? "change"
-                    : "changes"
-                }`
-              : "No adjustment"}
-          </strong>
+          {adjustments.length > 0 ? (
+            <div className="adjustment-lines">
+              {adjustments.map((adjustment) => (
+                <strong key={adjustment.parameter}>
+                  {adjustmentLine(adjustment)}
+                </strong>
+              ))}
+            </div>
+          ) : (
+            <strong>
+              {NO_ADJUSTMENT_TEXT[actionType] ?? "No adjustment"}
+            </strong>
+          )}
         </div>
 
-        <small>VIEW DETAILS</small>
+        <small>DETAILS</small>
       </button>
 
       <button
@@ -278,6 +309,10 @@ function RecommendationSummary({
           </strong>
         </div>
       </button>
+
+      <p className="recommendation-summary-text">
+        {narrative.explanation}
+      </p>
 
       <div className="recommendation-summary-grid">
         <button
