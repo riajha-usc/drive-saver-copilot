@@ -75,6 +75,8 @@ export default function App() {
   const [assetState, setAssetState] = useState({
     status: "idle",
     assets: [],
+    total: 0,
+    loadingMore: false,
     error: "",
   });
 
@@ -191,6 +193,8 @@ export default function App() {
       setAssetState({
         status: "idle",
         assets: [],
+        total: 0,
+        loadingMore: false,
         error: "",
       });
 
@@ -202,6 +206,8 @@ export default function App() {
     setAssetState({
       status: "loading",
       assets: [],
+      total: 0,
+      loadingMore: false,
       error: "",
     });
 
@@ -214,6 +220,8 @@ export default function App() {
         setAssetState({
           status: "ready",
           assets: response.assets,
+          total: response.total,
+          loadingMore: false,
           error: "",
         });
       })
@@ -225,6 +233,8 @@ export default function App() {
         setAssetState({
           status: "error",
           assets: [],
+          total: 0,
+          loadingMore: false,
           error: error.message,
         });
       });
@@ -547,6 +557,40 @@ export default function App() {
     }
   }
 
+  async function handleLoadMoreAssets() {
+    if (!selectedDatasetId || assetState.loadingMore) {
+      return;
+    }
+
+    const datasetId = selectedDatasetId;
+    const filter = assetFilter;
+
+    setAssetState((current) => ({
+      ...current,
+      loadingMore: true,
+    }));
+
+    try {
+      const response = await listAssets(
+        datasetId,
+        assetQuery(filter, assetState.assets.length),
+      );
+
+      setAssetState((current) => ({
+        ...current,
+        assets: [...current.assets, ...response.assets],
+        total: response.total,
+        loadingMore: false,
+      }));
+    } catch (error) {
+      setAssetState((current) => ({
+        ...current,
+        loadingMore: false,
+        error: error.message,
+      }));
+    }
+  }
+
   /*
    * Returns an error message for the finder, or an empty string on success.
    */
@@ -611,6 +655,10 @@ export default function App() {
       </>
     );
   }
+
+  const hasMoreAssets =
+    assetState.status === "ready" &&
+    assetState.assets.length < assetState.total;
 
   return (
     <div className="app">
@@ -685,6 +733,30 @@ export default function App() {
               }
               error={assetState.error}
             />
+
+            {assetState.status === "ready" &&
+              assetState.total > 0 && (
+                <div className="asset-list-footer">
+                  <span>
+                    Showing{" "}
+                    {assetState.assets.length.toLocaleString()}{" "}
+                    of {assetState.total.toLocaleString()}
+                  </span>
+
+                  {hasMoreAssets && (
+                    <button
+                      type="button"
+                      className="load-more-button"
+                      disabled={assetState.loadingMore}
+                      onClick={handleLoadMoreAssets}
+                    >
+                      {assetState.loadingMore
+                        ? "LOADING..."
+                        : "LOAD MORE"}
+                    </button>
+                  )}
+                </div>
+              )}
           </Panel>
         </aside>
 
