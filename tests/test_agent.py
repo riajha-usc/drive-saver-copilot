@@ -156,3 +156,27 @@ def test_reasoning_says_who_wrote_the_explanation(monkeypatch, bundle, overstrai
     rec = graph.run(overstrain_point, bundle=bundle)
     narrate = next(s for s in rec.reasoning if s.node == "narrate")
     assert "template" in narrate.detail
+
+
+
+def test_combined_fix_reaches_the_card_with_both_actions(bundle, two_kind_point):
+    rec = graph.run(two_kind_point, hours_to_window=48, bundle=bundle)
+    assert rec.action_type == "schedule_maintenance"
+    params = {a.parameter for a in rec.adjustments}
+    assert "tool_wear" in params and "rotational_speed" in params
+    # Applying every adjustment clears every breached limit.
+    from backend import physics
+    moved = two_kind_point.replace(**{a.parameter: a.recommended_value for a in rec.adjustments})
+    assert not physics.rule_failures(moved)
+    # The card is honest that the tool change is not immediate.
+    assert any("already done" in c for c in rec.caveats)
+    assert "next line stop" in rec.narrative.operator_instruction
+
+
+def test_headlines_never_exceed_the_schema_limit():
+    from backend.agent.llm import HEADLINE_MAX, _fit
+    long = "Reduce torque by 17.5 percent and raise speed by 20.0 percent " * 4
+    fitted = _fit(long)
+    assert len(fitted) <= HEADLINE_MAX
+    assert fitted.endswith("...")
+    assert _fit("short") == "short"

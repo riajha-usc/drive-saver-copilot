@@ -113,10 +113,23 @@ def score_frame(X: pd.DataFrame, bundle=None) -> pd.DataFrame:
 
 
 def failure_probability(op: physics.OperatingPoint, bundle=None, head: str = "machine_failure") -> float:
-    """Single probability lookup, used heavily by the counterfactual search."""
+    """Single probability lookup."""
+    return failure_probabilities([op], bundle=bundle, head=head)[0]
+
+
+def failure_probabilities(ops: list[physics.OperatingPoint], bundle=None,
+                          head: str = "machine_failure") -> list[float]:
+    """Score many operating points in one model call.
+
+    The counterfactual search scores well over a hundred candidates per asset.
+    One batched predict_proba is far cheaper than a call per candidate, and the
+    per row results are identical.
+    """
+    if not ops:
+        return []
     bundle = bundle or load_bundle()
-    X = frame_from_records([op])[bundle.feature_columns]
-    return float(bundle.models[head].predict_proba(X)[:, 1][0])
+    X = frame_from_records(ops)[bundle.feature_columns]
+    return [float(p) for p in bundle.models[head].predict_proba(X)[:, 1]]
 
 
 def predict(op: physics.OperatingPoint, bundle=None, explain: bool = True) -> Prediction:

@@ -20,7 +20,7 @@ from langgraph.graph import END, START, StateGraph
 
 from backend import physics
 from backend.agent import economics
-from backend.agent.counterfactual import Candidate, select, simulate
+from backend.agent.counterfactual import Candidate, _describe, select, simulate
 from backend.agent.llm import llm_narration
 from backend.agent.schema import (Economics, Narrative, ParameterAdjustment,
                                   PrescriptiveRecommendation, Projection, ReasoningStep,
@@ -184,7 +184,7 @@ def _adjustments(op: physics.OperatingPoint, chosen: Candidate | None) -> list[P
             parameter="rotational_speed", label="VFD speed setpoint",
             current_value=round(op.rotational_speed, 1), recommended_value=round(new.rotational_speed, 1),
             unit="rpm", change_pct=round(chosen.speed_pct, 2)))
-    if chosen.action_type == "schedule_maintenance":
+    if chosen.tool_change:
         out.append(ParameterAdjustment(
             parameter="tool_wear", label="Tool wear at next line stop",
             current_value=round(op.tool_wear, 1), recommended_value=0.0,
@@ -219,6 +219,8 @@ def narrate(state: AgentState) -> dict:
         "rul_extension_hours": round(chosen.rul_gain_hours, 1) if chosen else 0.0,
         "throughput_loss_pct": round(chosen.throughput_loss_pct, 1) if chosen else 0.0,
         "unresolved": ", ".join(state.get("unresolved", [])) or "the fault",
+        "combined": bool(chosen and chosen.combined),
+        "setpoint_summary": _describe(chosen.torque_pct, chosen.speed_pct) if chosen else "",
     }
     narration, source = llm_narration(ctx)
     detail = ("Written by the language model from the computed figures."
@@ -259,6 +261,9 @@ def _caveats(state: AgentState, chosen: Candidate | None) -> list[str]:
         out.append(f"The model reads this asset as low risk, but "
                    f"{', '.join(pred.rule_violations)} is breached on the telemetry. "
                    "The breached limit is the fact, the score is the estimate.")
+    if chosen and chosen.combined:
+        out.append("The projection counts the tool change as already done. Until the "
+                   "next line stop, only the setpoint change is protecting the asset.")
     if pred.likely_mode == "TWF":
         out.append("The tool wear head is weak on this dataset (PR AUC 0.07) because the "
                    "failure point inside the wear window is random by construction.")

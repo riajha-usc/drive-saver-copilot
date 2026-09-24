@@ -4,12 +4,13 @@ import pytest
 
 from backend import physics
 from backend.agent.counterfactual import MAX_DERATE_PCT, select, simulate
-from backend.ml.predict import predict
+from backend.ml.predict import failure_probability, predict
 
 
 def test_torque_cut_relieves_overstrain(bundle, overstrain_point):
     cands = simulate(overstrain_point, bundle=bundle)
-    cuts = [c for c in cands if c.torque_pct == -20.0 and c.speed_pct == 0.0]
+    cuts = [c for c in cands
+            if c.torque_pct == -20.0 and c.speed_pct == 0.0 and not c.tool_change]
     assert len(cuts) == 1
     cut = cuts[0]
     assert cut.feasible
@@ -53,10 +54,14 @@ def test_selector_prefers_the_cheapest_option_that_clears_the_window(bundle, ove
 
 def test_tool_change_is_offered_when_wear_is_present(bundle, overstrain_point):
     cands = simulate(overstrain_point, bundle=bundle)
-    tool = [c for c in cands if c.action_type == "schedule_maintenance"]
-    assert len(tool) == 1
-    assert tool[0].operating_point.tool_wear == 0.0
-    assert tool[0].throughput_loss_pct == 0.0
+    tool_only = [c for c in cands if c.tool_change and c.action_count == 1]
+    assert len(tool_only) == 1
+    assert tool_only[0].operating_point.tool_wear == 0.0
+    assert tool_only[0].throughput_loss_pct == 0.0
+    # And paired with every setpoint change, for faults that need both.
+    paired = [c for c in cands if c.combined]
+    assert len(paired) == len([c for c in cands if not c.tool_change])
+    assert all(c.operating_point.tool_wear == 0.0 for c in paired)
 
 
 def test_selector_returns_nothing_when_no_candidate_helps(bundle, healthy_point):
@@ -73,11 +78,11 @@ def test_selector_will_not_prescribe_an_action_that_ignores_the_fault(bundle, he
     """
     base = predict(heat_point, bundle=bundle, explain=False)
     cands = simulate(heat_point, bundle=bundle)
-    tool = next(c for c in cands if c.action_type == "schedule_maintenance")
-    assert "HDF" in tool.remaining_violations, "fixture assumption: a tool change leaves HDF"
+    tool_only = next(c for c in cands if c.tool_change and c.action_count == 1)
+    assert "HDF" in tool_only.remaining_violations, "fixture assumption: a tool change leaves HDF"
 
     chosen, _ = select(cands, 48.0, base.rul_hours, baseline_violations=base.rule_violations)
-    assert chosen.action_type != "schedule_maintenance"
+    assert not chosen.tool_change
     assert "HDF" not in chosen.remaining_violations
 
 
@@ -100,3 +105,39 @@ def test_uprating_is_offered_when_the_drive_is_under_loaded(bundle, unfixable_po
         if c.feasible:
             rise = (c.operating_point.power_w - unfixable_point.power_w) / unfixable_point.power_w * 100
             assert rise <= 30.0 + 1e-9
+
+
+
+# ------------------------------------------------------------ combined fixes
+
+def test_a_fault_needing_two_kinds_of_fix_gets_both(bundle, two_kind_point):
+    base = predict(two_kind_point, bundle=bundle, explain=False)
+    assert set(base.rule_violations) == {"HDF", "TWF"}, "fixture assumption"
+
+    cands = simulate(two_kind_point, bundle=bundle)
+    # No single kind of fix can clear both limits...
+    singles = [c for c in cands if c.feasible and c.action_count == 1]
+    assert all(c.remaining_violations for c in singles)
+
+    # ...so the selector reaches for a pair, and the pair clears everything.
+    chosen, _ = select(cands, 48.0, base.rul_hours, baseline_violations=base.rule_violations)
+    assert chosen.combined
+    assert chosen.speed_pct > 0
+    assert not chosen.remaining_violations
+
+
+def test_a_single_fix_is_never_padded_with_a_tool_change(bundle, heat_point, overstrain_point):
+    for op in (heat_point, overstrain_point):
+        base = predict(op, bundle=bundle, explain=False)
+        chosen, _ = select(simulate(op, bundle=bundle), 48.0, base.rul_hours,
+                           baseline_violations=base.rule_violations)
+        assert chosen.action_count == 1
+
+
+def test_batch_scoring_matches_one_at_a_time(bundle, overstrain_point, heat_point,
+                                            two_kind_point):
+    from backend.ml.predict import failure_probabilities
+    ops = [overstrain_point, heat_point, two_kind_point]
+    batch = failure_probabilities(ops, bundle=bundle)
+    for op, p in zip(ops, batch):
+        assert p == pytest.approx(failure_probability(op, bundle=bundle), abs=1e-9)

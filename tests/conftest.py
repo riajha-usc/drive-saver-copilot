@@ -41,3 +41,14 @@ def unfixable_point():
     so the only honest answer is to take the asset off line.
     """
     return OperatingPoint("L", 298.5, 308.7, 2861, 4.6, 143)
+
+
+@pytest.fixture
+def two_kind_point():
+    """Breaches two limits that need different kinds of fix.
+
+    Tool wear is 210 min, inside the 200 to 240 minute failure window, which only
+    a tool change clears. The temperature spread is 8.0 K at 1345 rpm, a heat
+    dissipation failure, which only more speed clears.
+    """
+    return OperatingPoint("L", 302.0, 310.0, 1345, 42.0, 210)

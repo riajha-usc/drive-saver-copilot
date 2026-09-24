@@ -10,6 +10,12 @@ into hours of life gained. Two guards keep the answers honest:
      and buys a Power Failure instead.
   2. Every candidate carries its throughput cost, so the selector can prefer the
      smallest intervention that still reaches the maintenance window.
+
+Some assets breach two limits that need different kinds of fix, for example a
+worn tool (only a tool change helps) and heat build up (only more speed helps).
+The grid therefore also pairs the tool change with every setpoint change. The
+selector prefers fewer actions, so a pair is only prescribed when no single
+change clears every breached limit.
 """
 
 from __future__ import annotations
@@ -17,7 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from backend import physics
-from backend.ml.predict import failure_probability
+from backend.ml.predict import failure_probabilities, failure_probability
 from backend.ml.rul import probability_to_rul_hours
 
 # Torque and speed trims a VFD can hold indefinitely. Positive speed steps matter
@@ -51,11 +57,21 @@ class Candidate:
     new_violations: list = field(default_factory=list)
     remaining_violations: list = field(default_factory=list)
     resolved_violations: list = field(default_factory=list)
+    tool_change: bool = False
 
     @property
     def magnitude(self) -> float:
-        """How large an intervention this is, for the minimal action preference."""
+        """How large a setpoint move this is, for the minimal action preference."""
         return abs(self.torque_pct) + abs(self.speed_pct)
+
+    @property
+    def action_count(self) -> int:
+        """How many separate things the operator has to do."""
+        return int(bool(self.torque_pct or self.speed_pct)) + int(self.tool_change)
+
+    @property
+    def combined(self) -> bool:
+        return self.action_count == 2
 
     def as_dict(self) -> dict:
         return {
@@ -71,6 +87,7 @@ class Candidate:
             "rejection": self.rejection,
             "resolves": self.resolved_violations,
             "still_violating": self.remaining_violations,
+            "tool_change": self.tool_change,
         }
 
 
@@ -111,50 +128,64 @@ def simulate(base: physics.OperatingPoint, bundle=None,
     power_base = base.power_w
     base_violations = set(physics.rule_failures(base))
 
-    out: list[Candidate] = []
-    for t_pct in TORQUE_STEPS:
-        for s_pct in SPEED_STEPS:
-            if t_pct == 0.0 and s_pct == 0.0:
-                continue
-            cand_op = base.scaled(torque_pct=t_pct, speed_pct=s_pct)
-            loss = max(0.0, (power_base - cand_op.power_w) / power_base * 100.0)
-            feasible, rejection, introduced = _check_feasible(base, cand_op, loss)
-
-            p_new = failure_probability(cand_op, bundle=bundle)
-            rul_new = probability_to_rul_hours(p_new)
-            after = set(physics.rule_failures(cand_op))
-            out.append(Candidate(
-                torque_pct=t_pct, speed_pct=s_pct, action_type="derate",
-                description=_describe(t_pct, s_pct), operating_point=cand_op,
-                failure_probability=p_new, rul_hours=rul_new,
-                rul_gain_hours=rul_new - rul_base, risk_reduction=p_base - p_new,
-                throughput_loss_pct=loss, feasible=feasible,
-                rejection=rejection, new_violations=introduced,
-                remaining_violations=sorted(after),
-                resolved_violations=sorted(base_violations - after),
-            ))
-
-    # A tool change is not a VFD trim, but when wear is the driver it is the only
-    # honest prescription, so it competes in the same ranking.
+    # Enumerate first, score once. Each plan is (torque %, speed %, tool change).
+    setpoints = [(t, s_) for t in TORQUE_STEPS for s_ in SPEED_STEPS if t or s_]
+    plans = [(t, s_, False) for t, s_ in setpoints]
     if include_tool_change and base.tool_wear > 0:
-        cand_op = base.replace(tool_wear=0.0)
-        p_new = failure_probability(cand_op, bundle=bundle)
+        # A tool change is not a VFD trim, but when wear is the driver it is the
+        # only honest prescription, so it competes in the same ranking, alone and
+        # paired with each setpoint change.
+        plans.append((0.0, 0.0, True))
+        plans += [(t, s_, True) for t, s_ in setpoints]
+
+    ops = []
+    for t_pct, s_pct, tool in plans:
+        op = base.scaled(torque_pct=t_pct, speed_pct=s_pct)
+        ops.append(op.replace(tool_wear=0.0) if tool else op)
+    probabilities = failure_probabilities(ops, bundle=bundle)
+
+    out: list[Candidate] = []
+    for (t_pct, s_pct, tool), cand_op, p_new in zip(plans, ops, probabilities):
+        loss = max(0.0, (power_base - cand_op.power_w) / power_base * 100.0)
+        if t_pct or s_pct:
+            feasible, rejection, introduced = _check_feasible(base, cand_op, loss)
+        else:
+            feasible, rejection, introduced = True, "", []   # tool change alone
+
+        if tool and (t_pct or s_pct):
+            description = (f"{_describe(t_pct, s_pct)} now and replace the tool "
+                           f"at the next line stop")
+        elif tool:
+            description = "Replace the tool at the next line stop"
+        else:
+            description = _describe(t_pct, s_pct)
+
         rul_new = probability_to_rul_hours(p_new)
         after = set(physics.rule_failures(cand_op))
         out.append(Candidate(
-            torque_pct=0.0, speed_pct=0.0, action_type="schedule_maintenance",
-            description="Replace the tool at the next line stop",
-            operating_point=cand_op, failure_probability=p_new, rul_hours=rul_new,
+            torque_pct=t_pct, speed_pct=s_pct,
+            action_type="schedule_maintenance" if tool else "derate",
+            description=description, operating_point=cand_op,
+            failure_probability=p_new, rul_hours=rul_new,
             rul_gain_hours=rul_new - rul_base, risk_reduction=p_base - p_new,
-            throughput_loss_pct=0.0, feasible=True,
+            throughput_loss_pct=loss, feasible=feasible,
+            rejection=rejection, new_violations=introduced,
             remaining_violations=sorted(after),
             resolved_violations=sorted(base_violations - after),
+            tool_change=tool,
         ))
 
     # Rank on risk reduction rather than hours: the RUL proxy saturates at its
     # cap, so hours tie for every genuinely safe candidate.
     out.sort(key=lambda c: (-c.risk_reduction, c.throughput_loss_pct))
     return out
+
+
+def _intervention_cost(c: Candidate) -> tuple:
+    """Least output given up, then fewest separate actions, then the smallest
+    setpoint move, then the biggest risk reduction. Fewest actions keeps a tool
+    change from riding along on a fix that a setpoint change alone would do."""
+    return (round(c.throughput_loss_pct, 2), c.action_count, c.magnitude, -c.risk_reduction)
 
 
 def select(candidates: list[Candidate], hours_to_window: float,
@@ -186,9 +217,7 @@ def select(candidates: list[Candidate], hours_to_window: float,
 
     clears = [c for c in feasible if c.rul_hours >= hours_to_window]
     if clears:
-        # Minimal intervention: least output given up, then the smallest setpoint
-        # move that still clears the window, then the biggest risk reduction.
-        clears.sort(key=lambda c: (round(c.throughput_loss_pct, 2), c.magnitude, -c.risk_reduction))
+        clears.sort(key=_intervention_cost)
         chosen = clears[0]
     else:
         chosen = max(feasible, key=lambda c: c.risk_reduction)
@@ -196,7 +225,5 @@ def select(candidates: list[Candidate], hours_to_window: float,
     # Surface the cheapest other options that also clear the window, so the
     # operator can trade output against margin rather than take one answer.
     pool = clears if clears else feasible
-    alternatives = sorted((c for c in pool if c is not chosen),
-                          key=lambda c: (round(c.throughput_loss_pct, 2), c.magnitude,
-                                         -c.risk_reduction))[:3]
+    alternatives = sorted((c for c in pool if c is not chosen), key=_intervention_cost)[:3]
     return chosen, alternatives

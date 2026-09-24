@@ -37,6 +37,16 @@ class NarrationOut(BaseModel):
     operator_instruction: str
 
 
+HEADLINE_MAX = 140
+
+
+def _fit(headline: str) -> str:
+    """Keep a headline inside the schema's limit by trimming at a word boundary."""
+    if len(headline) <= HEADLINE_MAX:
+        return headline
+    return headline[:HEADLINE_MAX - 3].rsplit(" ", 1)[0] + "..."
+
+
 def _facts_block(ctx: dict) -> str:
     return "\n".join(f"{k}: {v}" for k, v in ctx.items())
 
@@ -45,13 +55,14 @@ def deterministic_narration(ctx: dict) -> NarrationOut:
     """Template narrator. Always available, no network."""
     if ctx["action_type"] == "stop_now":
         return NarrationOut(
-            headline=(f"Take {ctx['asset_id']} off line, no single safe change "
-                      f"clears {ctx['unresolved']}"),
+            headline=_fit(f"Take {ctx['asset_id']} off line, no single safe change "
+                          f"clears {ctx['unresolved']}"),
             explanation=(
                 f"{ctx['asset_id']} is at {ctx['risk_band']} risk of {ctx['mode_name']} "
                 f"({ctx['failure_probability_pct']} within the reference horizon) and "
                 f"{ctx['physical_margin']}. Every torque and speed trim inside the drive's "
-                f"operating range leaves the fault in place, so there is no adjustment that "
+                f"operating range, with or without a tool change, leaves the fault in place, "
+                f"so there is no adjustment that "
                 f"carries this asset to the {ctx['hours_to_window']} hour window."),
             operator_instruction=("Take the asset off line and raise a work order against "
                                   f"{ctx['mode_name']}."),
@@ -59,7 +70,8 @@ def deterministic_narration(ctx: dict) -> NarrationOut:
 
     if ctx["action_type"] == "no_action":
         return NarrationOut(
-            headline=f"No action needed, risk is {ctx['risk_band']} at {ctx['failure_probability_pct']}",
+            headline=_fit(f"No action needed, risk is {ctx['risk_band']} at "
+                          f"{ctx['failure_probability_pct']}"),
             explanation=(f"{ctx['asset_id']} is running inside every physical limit. "
                          f"The closest limit is {ctx['physical_margin']}. "
                          f"Projected remaining life is {ctx['baseline_rul_hours']} hours."),
@@ -69,7 +81,15 @@ def deterministic_narration(ctx: dict) -> NarrationOut:
     gain = ctx["rul_extension_hours"]
     # The summary is a sentence opener elsewhere, so lower case it mid sentence.
     action = ctx["adjustment_summary"][0].lower() + ctx["adjustment_summary"][1:]
-    if ctx["action_type"] == "schedule_maintenance":
+    headline = (f"{ctx['adjustment_summary']} to add about {gain} hours "
+                f"before {ctx['mode_name']}")
+    if ctx.get("combined"):
+        # Two actions on different clocks: the setpoint now, the tool at the stop.
+        headline = (f"{ctx['setpoint_summary']} now and replace the tool: about {gain} "
+                    f"more hours before {ctx['mode_name']}")
+        instruction = (f"{ctx['setpoint_summary']} on the drive now, replace the tool at "
+                       f"the next line stop, and hold the new setpoint until then.")
+    elif ctx["action_type"] == "schedule_maintenance":
         instruction = (f"{ctx['adjustment_summary']} and keep the drive under watch until then.")
     elif ctx["action_type"] == "stop_now":
         instruction = ("Take the asset off line now, no setpoint change reaches the "
@@ -78,7 +98,7 @@ def deterministic_narration(ctx: dict) -> NarrationOut:
         instruction = (f"{ctx['adjustment_summary']} on the drive and hold that setpoint "
                        f"through the {ctx['hours_to_window']} hour maintenance window.")
     return NarrationOut(
-        headline=f"{ctx['adjustment_summary']} to add about {gain} hours before {ctx['mode_name']}",
+        headline=_fit(headline),
         explanation=(
             f"{ctx['asset_id']} is at {ctx['risk_band']} risk of {ctx['mode_name']} "
             f"({ctx['failure_probability_pct']} within the reference horizon), with roughly "
