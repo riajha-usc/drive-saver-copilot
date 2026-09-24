@@ -11,6 +11,7 @@ import {
   listDatasets,
 } from "./api";
 
+import AgentReasoning from "./components/AgentReasoning";
 import AssetFilters from "./components/AssetFilters";
 import AssetHealth from "./components/AssetHealth";
 import AssetTable from "./components/AssetTable";
@@ -922,61 +923,17 @@ export default function App() {
           </Panel>
 
           <Panel
-            title="ANALYSIS PIPELINE"
-            className="sandbox-panel"
+            title="AGENT REASONING"
+            className="sandbox-panel reasoning-panel"
           >
-            <p className="section-label">PROGRESS</p>
-
-            <div className="timeline">
-              <TimelineStep
-                number="1"
-                label="Dataset"
-                active={Boolean(selectedDatasetId)}
-              />
-
-              <TimelineStep
-                number="2"
-                label="Asset Selection"
-                active={Boolean(selectedAssetId)}
-              />
-
-              <TimelineStep
-                number="3"
-                label="Risk Analysis"
-                active={
-                  assetDetailState.status === "ready"
-                }
-              />
-
-              <TimelineStep
-                number="4"
-                label="Recommendation"
-                active={
-                  recommendationState.status === "ready"
-                }
-              />
-
-              <TimelineStep
-                number="5"
-                label="Adjustment"
-                active={applyState.status === "ready"}
-              />
-            </div>
-
-            <div className="model-summary">
-              <span>
-                Model:{" "}
-                {apiState.health?.model_loaded
-                  ? "Loaded"
-                  : "Not loaded"}
-              </span>
-
-              <span>
-                Assets at risk:{" "}
-                {selectedDataset?.at_risk_count ??
-                  "--"}
-              </span>
-            </div>
+            <AgentReasoning
+              hasSelection={Boolean(selectedAssetId)}
+              status={recommendationState.status}
+              reasoning={
+                recommendationState.recommendation?.reasoning
+              }
+              error={recommendationState.error}
+            />
           </Panel>
         </section>
 
@@ -1055,19 +1012,3 @@ function StatusRow({ label, value, active }) {
   );
 }
 
-function TimelineStep({
-  number,
-  label,
-  active = false,
-}) {
-  return (
-    <div
-      className={`timeline-step ${
-        active ? "active" : ""
-      }`}
-    >
-      <div className="timeline-number">{number}</div>
-      <span>{label}</span>
-    </div>
-  );
-}

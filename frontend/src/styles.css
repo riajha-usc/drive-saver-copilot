@@ -3094,3 +3094,104 @@ html[data-theme="light"] .recommendation-small-card:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Agent reasoning                                                     */
+/* ------------------------------------------------------------------ */
+
+.reasoning-state {
+  margin: 4px 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.reasoning-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reasoning-step {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 9px;
+  align-items: start;
+}
+
+.reasoning-marker {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.reasoning-step.done .reasoning-marker {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.reasoning-step-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reasoning-step strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.reasoning-step small {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reasoning-step p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.reasoning-list.pending .reasoning-step strong {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.reasoning-list.pending .reasoning-marker {
+  animation: reasoning-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes reasoning-pulse {
+  50% {
+    border-color: var(--abb-red);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reasoning-list.pending .reasoning-marker {
+    animation: none;
+  }
+}
+
+.reasoning-footer {
+  margin: 12px 0 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
