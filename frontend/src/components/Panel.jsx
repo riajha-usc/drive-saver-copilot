@@ -1,3 +1,8 @@
+/*
+ * Panels render only the actions they are given. The old per-panel menu button
+ * had no menu behind it, so it has been removed rather than left as a dead
+ * control.
+ */
 export default function Panel({
   title,
   children,
@@ -9,11 +14,9 @@ export default function Panel({
       <div className="panel-header">
         <h2>{title}</h2>
 
-        <div className="panel-actions">
-          {actions}
-          <button className="menu-button" aria-label={`More options for ${title}`}>
-          </button>
-        </div>
+        {actions && (
+          <div className="panel-actions">{actions}</div>
+        )}
       </div>
 
       <div className="panel-content">{children}</div>

@@ -1,67 +1,24 @@
-import { useEffect, useRef, useState } from "react";
-
+/*
+ * There is no sign-in in this prototype, so the header carries no profile or
+ * log out control. A control that does nothing reads as broken in a demo.
+ *
+ * The left mark names the challenge rather than using ABB's logo as the
+ * product's own brand.
+ */
 export default function DashboardHeader({
   apiStatus,
   theme,
   onThemeToggle,
-  onLogout,
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const profileRef = useRef(null);
-
   const isOnline = apiStatus === "ok";
   const isDarkTheme = theme === "dark";
 
-  useEffect(() => {
-    function handleOutsideClick(event) {
-      if (
-        profileRef.current &&
-        !profileRef.current.contains(event.target)
-      ) {
-        setMenuOpen(false);
-      }
-    }
-
-    function handleEscape(event) {
-      if (event.key === "Escape") {
-        setMenuOpen(false);
-      }
-    }
-
-    document.addEventListener(
-      "mousedown",
-      handleOutsideClick,
-    );
-
-    document.addEventListener(
-      "keydown",
-      handleEscape,
-    );
-
-    return () => {
-      document.removeEventListener(
-        "mousedown",
-        handleOutsideClick,
-      );
-
-      document.removeEventListener(
-        "keydown",
-        handleEscape,
-      );
-    };
-  }, []);
-
-  function handleLogout() {
-    setMenuOpen(false);
-
-    if (onLogout) {
-      onLogout();
-    }
-  }
-
   return (
     <header className="dashboard-header">
-      <div className="abb-logo">ABB</div>
+      <div className="header-context">
+        <strong>DSC</strong>
+        <span>ABB Accelerator 2026 prototype</span>
+      </div>
 
       <h1>DRIVE-SAVER COPILOT</h1>
 
@@ -70,15 +27,16 @@ export default function DashboardHeader({
           className={`status-dot ${
             isOnline ? "online" : "offline"
           }`}
+          role="status"
           title={
             isOnline
-              ? "System online"
-              : "System offline"
+              ? "API online"
+              : "API offline"
           }
           aria-label={
             isOnline
-              ? "System online"
-              : "System offline"
+              ? "API online"
+              : "API offline"
           }
         />
 
@@ -99,40 +57,6 @@ export default function DashboardHeader({
         >
           {isDarkTheme ? <SunIcon /> : <MoonIcon />}
         </button>
-
-        <div
-          className="profile-menu"
-          ref={profileRef}
-        >
-          <button
-            type="button"
-            className="avatar avatar-button"
-            aria-label="Open profile menu"
-            aria-expanded={menuOpen}
-            onClick={() =>
-              setMenuOpen((current) => !current)
-            }
-          >
-            SN
-          </button>
-
-          {menuOpen && (
-            <div className="profile-dropdown">
-              <div className="profile-details">
-                <strong>Sharayu Nagre</strong>
-                <span>Drive-Saver Dashboard</span>
-              </div>
-
-              <button
-                type="button"
-                className="logout-button"
-                onClick={handleLogout}
-              >
-                Log out
-              </button>
-            </div>
-          )}
-        </div>
       </div>
     </header>
   );

@@ -2695,3 +2695,40 @@ html[data-theme="light"] .analysis-tab-view::-webkit-scrollbar-thumb,
 html[data-theme="light"] .recommendation-view::-webkit-scrollbar-thumb {
   background: #bcc4cd;
 }
+
+/* ------------------------------------------------------------------ */
+/* Header context mark                                                 */
+/* ------------------------------------------------------------------ */
+
+.header-context {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.header-context strong {
+  color: var(--abb-red);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.header-context span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                          */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 820px) {
+  .header-context span {
+    display: none;
+  }
+}
