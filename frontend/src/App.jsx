@@ -11,6 +11,7 @@ import {
   listDatasets,
 } from "./api";
 
+import AssetFilters from "./components/AssetFilters";
 import AssetHealth from "./components/AssetHealth";
 import AssetTable from "./components/AssetTable";
 import DashboardHeader from "./components/DashboardHeader";
@@ -20,6 +21,7 @@ import RootCausePanel from "./components/RootCausePanel";
 import TelemetryCharts from "./components/TelemetryCharts";
 
 const DEFAULT_MAINTENANCE_WINDOW_HOURS = 48;
+const ASSET_PAGE_SIZE = 25;
 const THEME_STORAGE_KEY = "drive-saver-theme";
 
 /* Seeded by the API at startup; see DEFAULT_DATASET_ID in backend/api/store.py. */
@@ -67,6 +69,8 @@ export default function App() {
   const [selectedDatasetId, setSelectedDatasetId] =
     useState("");
   const [selectedAssetId, setSelectedAssetId] = useState("");
+
+  const [assetFilter, setAssetFilter] = useState("all");
 
   const [assetState, setAssetState] = useState({
     status: "idle",
@@ -180,7 +184,7 @@ export default function App() {
   }, []);
 
   /*
-   * Load assets when the selected dataset changes.
+   * Load the first page of assets when the dataset or the risk filter changes.
    */
   useEffect(() => {
     if (!selectedDatasetId) {
@@ -201,10 +205,7 @@ export default function App() {
       error: "",
     });
 
-    listAssets(selectedDatasetId, {
-      sort: "risk",
-      limit: 25,
-    })
+    listAssets(selectedDatasetId, assetQuery(assetFilter, 0))
       .then((response) => {
         if (cancelled) {
           return;
@@ -231,7 +232,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [selectedDatasetId]);
+  }, [selectedDatasetId, assetFilter]);
 
   /*
    * Load risk details for the selected asset.
@@ -546,6 +547,23 @@ export default function App() {
     }
   }
 
+  /*
+   * Returns an error message for the finder, or an empty string on success.
+   */
+  async function handleJumpToAsset(assetId) {
+    if (!selectedDatasetId) {
+      return "Load a dataset first.";
+    }
+
+    try {
+      await getAsset(selectedDatasetId, assetId);
+      setSelectedAssetId(assetId);
+      return "";
+    } catch {
+      return `${assetId} is not in this dataset.`;
+    }
+  }
+
   function handleThemeToggle() {
     setTheme((currentTheme) =>
       currentTheme === "dark" ? "light" : "dark",
@@ -651,6 +669,13 @@ export default function App() {
             title="ASSET SELECTION"
             className="asset-selection-panel"
           >
+            <AssetFilters
+              band={assetFilter}
+              onBandChange={setAssetFilter}
+              bandCounts={selectedDataset?.risk_band_counts}
+              onJump={handleJumpToAsset}
+            />
+
             <AssetTable
               assets={assetState.assets}
               selectedAssetId={selectedAssetId}
@@ -872,6 +897,24 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+/*
+ * Query for one page of the asset list. "all" sends no band so every risk band
+ * comes back, still ordered riskiest first.
+ */
+function assetQuery(filter, offset) {
+  const query = {
+    sort: "risk",
+    limit: ASSET_PAGE_SIZE,
+    offset,
+  };
+
+  if (filter !== "all") {
+    query.band = filter;
+  }
+
+  return query;
 }
 
 function StatusRow({ label, value, active }) {

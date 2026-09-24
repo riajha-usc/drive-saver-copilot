@@ -2724,6 +2724,120 @@ html[data-theme="light"] .recommendation-view::-webkit-scrollbar-thumb {
 }
 
 /* ------------------------------------------------------------------ */
+/* Asset filters and paging                                            */
+/* ------------------------------------------------------------------ */
+
+.asset-selection-panel > .panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.asset-selection-panel .asset-table {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.asset-filters {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+}
+
+.filter-chip small {
+  font-size: 9px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.filter-chip:hover,
+.filter-chip.active {
+  border-color: var(--abb-red);
+  color: var(--text);
+}
+
+.filter-chip.active {
+  background: var(--abb-dark-red);
+}
+
+.asset-jump {
+  display: flex;
+  gap: 6px;
+}
+
+.asset-jump input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: none;
+  color: var(--text);
+  background: var(--panel-soft);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.asset-jump input:focus {
+  border-color: var(--abb-red);
+}
+
+.asset-jump button,
+.load-more-button {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  background: var(--panel-soft);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.asset-jump button:hover:not(:disabled),
+.load-more-button:hover:not(:disabled) {
+  border-color: var(--abb-red);
+}
+
+.asset-jump button:disabled,
+.load-more-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.asset-jump-error {
+  margin: 0;
+  color: var(--abb-red);
+  font-size: 10px;
+}
+
+/* ------------------------------------------------------------------ */
 /* Responsive                                                          */
 /* ------------------------------------------------------------------ */
 
