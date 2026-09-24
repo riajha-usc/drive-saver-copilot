@@ -20,7 +20,8 @@ from langgraph.graph import END, START, StateGraph
 
 from backend import physics
 from backend.agent import economics
-from backend.agent.counterfactual import Candidate, _describe, select, simulate
+from backend.agent.counterfactual import (Candidate, _describe, _describe_short, select,
+                                          simulate)
 from backend.agent.llm import llm_narration
 from backend.agent.schema import (Economics, Narrative, ParameterAdjustment,
                                   PrescriptiveRecommendation, Projection, ReasoningStep,
@@ -80,7 +81,7 @@ def diagnose(state: AgentState) -> dict:
     detail += "."
     if pred.rule_violations:
         detail += f" Physical limits breached: {', '.join(pred.rule_violations)}."
-    pushing = [a for a in pred.attributions if a.shap_value > 0]
+    pushing = pred.root_cause_factors()
     if pushing:
         detail += f" Top driver: {pushing[0].label} ({pushing[0].share_of_risk:.0%} of the risk)."
 
@@ -196,7 +197,7 @@ def narrate(state: AgentState) -> dict:
     """The only node that touches an LLM, and it only writes prose."""
     started = time.perf_counter()
     pred, chosen = state["prediction"], state.get("chosen")
-    pushing = [a for a in pred.attributions if a.shap_value > 0]
+    pushing = pred.root_cause_factors()
     top = pushing[0] if pushing else None
     binding = pred.margins[physics.binding_mode(state["operating_point"])]
 
@@ -221,6 +222,7 @@ def narrate(state: AgentState) -> dict:
         "unresolved": ", ".join(state.get("unresolved", [])) or "the fault",
         "combined": bool(chosen and chosen.combined),
         "setpoint_summary": _describe(chosen.torque_pct, chosen.speed_pct) if chosen else "",
+        "setpoint_short": _describe_short(chosen.torque_pct, chosen.speed_pct) if chosen else "",
     }
     narration, source = llm_narration(ctx)
     detail = ("Written by the language model from the computed figures."
@@ -296,7 +298,7 @@ def validate(state: AgentState) -> dict:
     )
     # Only a feature pushing risk UP can be a root cause. On a healthy asset every
     # attribution is negative, so there is nothing to blame.
-    pushing = [a for a in pred.attributions if a.shap_value > 0]
+    pushing = pred.root_cause_factors()
     top = pushing[0] if pushing else None
 
     rec = PrescriptiveRecommendation(
@@ -317,7 +319,7 @@ def validate(state: AgentState) -> dict:
         root_cause=RootCause(
             summary=(f"{top.label} is the dominant contributor at "
                      f"{top.share_of_risk * 100:.0f} percent of the upward risk push"
-                     if top else "No feature is pushing this asset toward failure"),
+                     if top else "Risk is normal, so there is no root cause to act on"),
             primary_driver=top.label if top else "none",
             primary_driver_share=round(top.share_of_risk, 4) if top else 0.0,
             controllable_lever=(pred.dominant_lever if top and pred.dominant_lever in

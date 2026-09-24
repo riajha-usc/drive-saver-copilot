@@ -100,6 +100,16 @@ def _describe(torque_pct: float, speed_pct: float) -> str:
     return " and ".join(parts).capitalize() if parts else "Hold current setpoints"
 
 
+def _describe_short(torque_pct: float, speed_pct: float) -> str:
+    """Compact form for headlines, where the full wording can run past the limit."""
+    parts = []
+    if torque_pct:
+        parts.append(f"torque {torque_pct:+.1f}%")
+    if speed_pct:
+        parts.append(f"speed {speed_pct:+.1f}%")
+    return "Set " + " and ".join(parts) if parts else "Hold current setpoints"
+
+
 def _check_feasible(base: physics.OperatingPoint, cand: physics.OperatingPoint,
                     throughput_loss_pct: float) -> tuple[bool, str, list]:
     if cand.torque < MIN_TORQUE_NM:

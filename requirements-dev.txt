@@ -2,3 +2,5 @@
 -r requirements.txt
 pytest==9.1.1
 httpx==0.28.1
+# Experiment tracking during training; not needed to serve the app.
+mlflow==3.16.1

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import shap
@@ -44,6 +46,28 @@ class Attribution:
         return asdict(self)
 
 
+def _positive_class(raw, n_features: int) -> np.ndarray:
+    """SHAP values for the failure class, as one value per feature.
+
+    TreeExplainer's output shape depends on the model family and the SHAP
+    version: XGBoost gives (rows, features), while LightGBM binary models have
+    returned either the same or a [negative, positive] pair of arrays, and some
+    versions add a trailing class axis. Anything else raises, because zipping a
+    mis-shaped array against the feature names would silently mislabel the root
+    cause.
+    """
+    if isinstance(raw, list):
+        raw = raw[-1]
+    arr = np.asarray(raw)
+    if arr.ndim == 3:
+        arr = arr[..., -1]
+    arr = arr.reshape(-1)
+    if arr.shape[0] != n_features:
+        raise ValueError(f"unexpected SHAP output: {arr.shape[0]} values for "
+                         f"{n_features} features")
+    return arr
+
+
 class Explainer:
     """SHAP wrapper bound to one trained bundle."""
 
@@ -61,8 +85,11 @@ class Explainer:
         """Top contributors for a single row frame."""
         if len(X) != 1:
             raise ValueError("attributions expects exactly one row")
-        values = self._explainer(head).shap_values(X)
-        values = np.asarray(values).reshape(-1)
+        with warnings.catch_warnings():
+            # LightGBM's informational output format note, handled in _positive_class.
+            warnings.simplefilter("ignore", UserWarning)
+            raw = self._explainer(head).shap_values(X)
+        values = _positive_class(raw, X.shape[1])
 
         total_up = float(values[values > 0].sum()) or 1.0
         out = []

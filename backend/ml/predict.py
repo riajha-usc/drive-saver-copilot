@@ -50,6 +50,24 @@ class Prediction:
     attributions: list[Attribution] = field(default_factory=list)
     dominant_lever: str = "none"
 
+    @property
+    def at_risk(self) -> bool:
+        """Above the normal band, or breaching a physical limit."""
+        return self.risk_band != "normal" or bool(self.rule_violations)
+
+    def root_cause_factors(self) -> list[Attribution]:
+        """Features pushing risk up, but only for an asset that is at risk.
+
+        A healthy asset can still have a feature nudging its score up slightly;
+        whether it does depends on the model family (LightGBM does here, XGBoost
+        did not). Naming that feature a root cause on a 0.01 percent risk asset
+        would be alarm without substance, so the rule is stated rather than left
+        to the model.
+        """
+        if not self.at_risk:
+            return []
+        return [a for a in self.attributions if a.shap_value > 0]
+
     def as_dict(self) -> dict:
         return {
             "failure_probability": round(self.failure_probability, 4),
@@ -156,6 +174,8 @@ def predict(op: physics.OperatingPoint, bundle=None, explain: bool = True) -> Pr
         ex = get_explainer(bundle)
         attributions = ex.attributions(X, head="machine_failure")
         lever = ex.dominant_lever(X, head="machine_failure")
+        if band == "normal" and not violations:
+            lever = "none"   # same rule as Prediction.root_cause_factors
 
     return Prediction(
         operating_point=op,

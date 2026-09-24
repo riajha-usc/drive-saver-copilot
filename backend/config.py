@@ -16,6 +16,13 @@ METRICS_JSON = MODEL_DIR / "metrics.json"
 
 UCI_DATASET_ID = 601
 RANDOM_STATE = 42
+
+# Experiment tracking. MLflow is a development dependency; training logs to it
+# when it is installed and DSC_MLFLOW is not switched off.
+MLFLOW_ENABLED = os.getenv("DSC_MLFLOW", "1").lower() not in ("0", "false", "no")
+MLFLOW_TRACKING_URI = os.getenv("DSC_MLFLOW_TRACKING_URI",
+                                f"sqlite:///{ROOT / 'models' / 'mlflow.db'}")
+MLFLOW_EXPERIMENT = "drive-saver-copilot"
 TEST_SIZE = 0.2
 
 # Reference horizon used by the RUL proxy. The AI4I dataset carries no run-to-failure

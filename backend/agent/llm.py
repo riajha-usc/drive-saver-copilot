@@ -85,7 +85,7 @@ def deterministic_narration(ctx: dict) -> NarrationOut:
                 f"before {ctx['mode_name']}")
     if ctx.get("combined"):
         # Two actions on different clocks: the setpoint now, the tool at the stop.
-        headline = (f"{ctx['setpoint_summary']} now and replace the tool: about {gain} "
+        headline = (f"{ctx['setpoint_short']} now and replace the tool: about {gain} "
                     f"more hours before {ctx['mode_name']}")
         instruction = (f"{ctx['setpoint_summary']} on the drive now, replace the tool at "
                        f"the next line stop, and hold the new setpoint until then.")

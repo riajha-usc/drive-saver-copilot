@@ -12,3 +12,6 @@ frontend/dist/
 
 # Detailed internal design notes, kept out of the repo.
 TECHNICAL_DOCUMENTATION.md
+
+# MLflow artifacts, if a run ever writes any.
+mlruns/

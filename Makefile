@@ -24,6 +24,9 @@ ui:
 ui-build:
 	cd frontend && npm install && npm run build
 
+mlflow:
+	MLFLOW_DISABLE_TELEMETRY=true $(VENV)/bin/mlflow ui --backend-store-uri sqlite:///models/mlflow.db --port 5000
+
 docker-build:
 	docker build -t drive-saver-copilot .
 
@@ -32,4 +35,4 @@ docker-run: docker-build
 
 all: train test demo
 
-.PHONY: setup train demo test api ui ui-build docker-build docker-run all
+.PHONY: setup train demo test api ui ui-build mlflow docker-build docker-run all
