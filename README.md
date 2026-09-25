@@ -19,7 +19,9 @@ Maintenance Studio.
 telemetry -> failure risk model -> SHAP root cause -> counterfactual agent -> prescription
 ```
 
-1. **Predict.** Five XGBoost models score failure risk overall and per failure mode.
+1. **Predict.** Five failure models score risk overall and per failure mode. Each
+   is chosen from XGBoost, LightGBM and a baseline on validation data, with every
+   candidate tracked in MLflow.
 2. **Explain.** SHAP shows which signals drive the risk and which control lever
    moves them.
 3. **Prescribe.** A LangGraph agent simulates torque and speed adjustments, rejects
@@ -31,7 +33,10 @@ telemetry -> failure risk model -> SHAP root cause -> counterfactual agent -> pr
 - Asset dashboard with risk filters, telemetry charts and root cause analysis
 - Adjustable maintenance window that changes the prescription
 - Before and after projection, economics, caveats and alternative options
-- CSV upload scores new telemetry live
+- CSV upload scores new telemetry live, with a data quality report: skipped rows
+  and why, readings outside the training range, and a verdict
+- Model comparison tab showing the candidates behind every prediction
+- The agent's reasoning steps, with what each found
 - Physics guards: a fix never trades one failure for another
 - Runs fully offline; an LLM is optional and only writes the explanation
 
@@ -39,7 +44,8 @@ telemetry -> failure risk model -> SHAP root cause -> counterfactual agent -> pr
 
 | Area | Tools |
 | --- | --- |
-| Machine learning | Python, XGBoost, scikit-learn, pandas |
+| Machine learning | Python, XGBoost, LightGBM, scikit-learn, pandas |
+| Experiment tracking | MLflow |
 | Explainability | SHAP |
 | Agent | LangGraph, optional Anthropic Claude for narration |
 | API | FastAPI, Pydantic |
@@ -61,6 +67,7 @@ Then:
 make setup      # virtual environment and dependencies
 make train      # fetch the dataset and train the models
 make test       # run the test suite
+make mlflow     # browse the model comparison at http://127.0.0.1:5000
 make ui-build   # build the dashboard
 make api        # API and dashboard on http://127.0.0.1:8000, API docs at /docs
 ```
@@ -95,6 +102,7 @@ Interactive docs are served at `/docs`. Main endpoints:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | POST | `/datasets` | upload a telemetry CSV |
+| GET | `/datasets/{id}/quality` | data quality report and verdict |
 | GET | `/datasets/{id}/assets` | assets sorted by risk, with filters and paging |
 | GET | `/datasets/{id}/assets/{asset_id}` | risk, root cause and physical margins |
 | POST | `/datasets/{id}/assets/{asset_id}/recommendation` | run the agent |
@@ -105,7 +113,7 @@ Interactive docs are served at `/docs`. Main endpoints:
 ```
 backend/
   physics.py      failure rules and physical margins
-  ml/             data pipeline, training, SHAP, inference
+  ml/             data pipeline, model selection, SHAP, inference, quality report
   agent/          counterfactual search, LangGraph graph, output schema
   api/            FastAPI app and routes
 frontend/         React dashboard
@@ -125,5 +133,5 @@ data/raw/         AI4I 2020 dataset
 
 Trained on the [AI4I 2020 Predictive Maintenance Dataset](https://archive.ics.uci.edu/dataset/601/ai4i+2020+predictive+maintenance+dataset)
 from the UCI Machine Learning Repository, licensed CC BY 4.0. Built with
-open source libraries including XGBoost, SHAP, LangGraph, FastAPI, React and
-Recharts.
+open source libraries including XGBoost, LightGBM, SHAP, MLflow, LangGraph,
+FastAPI, React and Recharts.
