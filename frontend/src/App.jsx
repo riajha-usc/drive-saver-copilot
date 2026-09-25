@@ -19,6 +19,7 @@ import DashboardHeader from "./components/DashboardHeader";
 import DatasetUploader from "./components/DatasetUploader";
 import MaintenanceWindowControl from "./components/MaintenanceWindowControl";
 import ModelComparison from "./components/ModelComparison";
+import QualityReport, { VERDICT_LABELS } from "./components/QualityReport";
 import Panel from "./components/Panel";
 import RecommendationPanel from "./components/RecommendationPanel";
 import RootCausePanel from "./components/RootCausePanel";
@@ -116,6 +117,8 @@ export default function App() {
 
   const [analysisTab, setAnalysisTab] =
     useState("root-cause");
+
+  const [qualityDatasetId, setQualityDatasetId] = useState("");
 
   /*
    * Apply and remember the selected dashboard theme.
@@ -705,6 +708,22 @@ export default function App() {
           ))}
         </div>
 
+        {selectedDataset?.quality_verdict && (
+          <div className="dataset-quality">
+            <span
+              className={`quality-badge ${selectedDataset.quality_verdict}`}
+            >
+              {VERDICT_LABELS[selectedDataset.quality_verdict]}
+            </span>
+            <button
+              type="button"
+              onClick={() => setQualityDatasetId(selectedDatasetId)}
+            >
+              VIEW QUALITY REPORT
+            </button>
+          </div>
+        )}
+
         <DatasetUploader onUploaded={handleUploaded} />
       </>
     );
@@ -1011,6 +1030,13 @@ export default function App() {
           </Panel>
         </aside>
       </main>
+
+      {qualityDatasetId && (
+        <QualityReport
+          datasetId={qualityDatasetId}
+          onClose={() => setQualityDatasetId("")}
+        />
+      )}
     </div>
   );
 }

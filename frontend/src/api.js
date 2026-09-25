@@ -23,6 +23,7 @@ export const getHealth = () => request("/health");
 export const getModelInfo = () => request("/model");
 export const listDatasets = () => request("/datasets");
 export const getDataset = (id) => request(`/datasets/${id}`);
+export const getDatasetQuality = (id) => request(`/datasets/${id}/quality`);
 
 export const listAssets = (id, params = {}) =>
   request(`/datasets/${id}/assets?${new URLSearchParams({ limit: 50, sort: "risk", ...params })}`);

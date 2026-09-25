@@ -110,6 +110,15 @@ export default function DatasetUploader({ onUploaded }) {
               Opened riskiest asset {summary.highest_risk_asset}
             </span>
           )}
+
+          {summary.quality_verdict && (
+            <span>
+              Data quality:{" "}
+              {{ ready: "ready", use_with_care: "use with care",
+                 not_usable: "not usable" }[summary.quality_verdict]}
+              , see the report below
+            </span>
+          )}
         </div>
       )}
 
