@@ -13,6 +13,12 @@ Maintenance Studio.
 **Live demo:** https://drive-saver-copilot-138499493256.us-central1.run.app
 (the first visit after a quiet spell can take a few seconds while it starts up)
 
+## Documentation
+
+- [Project summary](docs/PROJECT_SUMMARY.md): the problem, the solution and its impact
+- [Technical documentation (PDF)](docs/Drive-Saver-Copilot-Technical-Documentation.pdf):
+  architecture, technologies, implementation and setup
+
 ## How it works
 
 ```

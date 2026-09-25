@@ -10,8 +10,11 @@ models/
 frontend/node_modules/
 frontend/dist/
 
-# Detailed internal design notes, kept out of the repo.
+# Documentation kept out of the repo: internal design notes, the submission
+# technical document, and the exported submission files.
+DESIGN_NOTES.md
 TECHNICAL_DOCUMENTATION.md
+submission/
 
 # MLflow artifacts, if a run ever writes any.
 mlruns/
