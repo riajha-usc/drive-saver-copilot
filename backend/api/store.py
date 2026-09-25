@@ -19,7 +19,8 @@ from datetime import datetime, timezone
 import pandas as pd
 
 from backend.ml.dataset import FEATURE_COLUMNS, add_features, clean, load_dataset
-from backend.ml.predict import score_frame
+from backend.ml.predict import load_bundle, score_frame
+from backend.ml.quality import build_report
 from backend.physics import OperatingPoint, rule_failures
 
 DEFAULT_DATASET_ID = "ai4i-sample"
@@ -42,6 +43,7 @@ class Dataset:
     frame: pd.DataFrame          # cleaned telemetry plus derived features
     scores: pd.DataFrame         # per row probabilities, band, RUL proxy, mode
     rows_rejected: int = 0
+    quality: dict = field(default_factory=dict)
     _index_by_asset: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -73,12 +75,19 @@ class Dataset:
             "at_risk_count": self.at_risk_count,
             "risk_band_counts": {k: int(v) for k, v in bands.items()},
             "highest_risk_asset": self.highest_risk_asset(),
+            "quality_verdict": self.quality.get("verdict"),
         }
 
     def highest_risk_asset(self) -> str | None:
         if self.scores.empty:
             return None
         return asset_id_for(int(self.scores["p_machine_failure"].idxmax()))
+
+
+def _quality(frame) -> dict:
+    """Quality report against the ranges the loaded model was trained on."""
+    ranges = load_bundle().metrics.get("training_ranges")
+    return build_report(frame, ranges)
 
 
 class TelemetryStore:
@@ -95,7 +104,9 @@ class TelemetryStore:
         self._datasets[DEFAULT_DATASET_ID] = Dataset(
             id=DEFAULT_DATASET_ID, name="AI4I 2020 sample",
             uploaded_at=datetime.now(timezone.utc),
-            frame=frame, scores=score_frame(frame[FEATURE_COLUMNS]))
+            frame=frame, scores=score_frame(frame[FEATURE_COLUMNS]),
+            rows_rejected=int(frame.attrs.get("rows_dropped", 0)),
+            quality=_quality(frame))
 
     def ingest_csv(self, raw_bytes: bytes, name: str) -> Dataset:
         """Clean, feature engineer and score an uploaded CSV."""
@@ -115,7 +126,8 @@ class TelemetryStore:
             id=uuid.uuid4().hex[:12], name=name,
             uploaded_at=datetime.now(timezone.utc), frame=frame,
             scores=score_frame(frame[FEATURE_COLUMNS]),
-            rows_rejected=int(len(raw) - len(cleaned)))
+            rows_rejected=int(len(raw) - len(cleaned)),
+            quality=_quality(frame))
         self._datasets[ds.id] = ds
         return ds
 

@@ -10,8 +10,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 
 from backend.api.deps import get_bundle, get_dataset
-from backend.api.schemas import (AssetPage, AssetRow, DatasetSummary, ScoreRequest,
-                                 ScoreResponse)
+from backend.api.schemas import (AssetPage, AssetRow, DatasetSummary, QualityReport,
+                                 ScoreRequest, ScoreResponse)
 from backend.api.store import Dataset, asset_row, store
 from backend.ml.dataset import FEATURE_COLUMNS, frame_from_records
 from backend.ml.predict import score_frame
@@ -56,6 +56,13 @@ def list_datasets() -> list[DatasetSummary]:
 @router.get("/datasets/{dataset_id}", response_model=DatasetSummary)
 def get_dataset_summary(ds: Dataset = Depends(get_dataset)) -> DatasetSummary:
     return DatasetSummary(**ds.summary())
+
+
+@router.get("/datasets/{dataset_id}/quality", response_model=QualityReport)
+def dataset_quality(ds: Dataset = Depends(get_dataset)) -> QualityReport:
+    """Whether the dataset is fit to predict on: skipped rows and why, readings
+    outside the training range, product and failure mix, and a verdict."""
+    return QualityReport(dataset_id=ds.id, name=ds.name, **ds.quality)
 
 
 @router.get("/datasets/{dataset_id}/assets", response_model=AssetPage)

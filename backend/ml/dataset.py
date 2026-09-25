@@ -77,8 +77,19 @@ def clean(raw: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"telemetry is missing required columns: {missing}")
 
+    received = len(df)
+    rejections: dict[str, int] = {}
+
+    def keep(mask, reason: str) -> None:
+        """Drop the rows failing a check and count them under that reason."""
+        nonlocal df
+        dropped = int((~mask).sum())
+        if dropped:
+            rejections[reason] = rejections.get(reason, 0) + dropped
+        df = df[mask]
+
     df["type"] = df["type"].astype(str).str.strip().str.upper()
-    df = df[df["type"].isin(QUALITY_TYPES)]
+    keep(df["type"].isin(QUALITY_TYPES), "unknown_type")
 
     for col in BASE_FEATURES:
         df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -86,12 +97,19 @@ def clean(raw: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
 
-    before = len(df)
-    df = df.dropna(subset=BASE_FEATURES)
-    df = df[(df["rotational_speed"] > 0) & (df["torque"] >= 0) & (df["tool_wear"] >= 0)]
-    df = df.drop_duplicates()
-    df.attrs["rows_dropped"] = before - len(df)
-    return df.reset_index(drop=True)
+    keep(df[BASE_FEATURES].notna().all(axis=1), "missing_or_non_numeric")
+    keep(df["rotational_speed"] > 0, "non_positive_speed")
+    keep(df["torque"] >= 0, "negative_torque")
+    keep(df["tool_wear"] >= 0, "negative_tool_wear")
+    keep(~df.duplicated(), "duplicate_row")
+
+    df = df.reset_index(drop=True)
+    # Read by the dataset quality report. Checks run in the order above, so a row
+    # is counted under the first check it fails.
+    df.attrs["rows_received"] = received
+    df.attrs["rejections"] = rejections
+    df.attrs["rows_dropped"] = received - len(df)
+    return df
 
 
 def add_features(df: pd.DataFrame) -> pd.DataFrame:

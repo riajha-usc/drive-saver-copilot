@@ -80,6 +80,54 @@ class DatasetSummary(Strict):
     at_risk_count: int
     risk_band_counts: dict[str, int]
     highest_risk_asset: str | None
+    quality_verdict: Literal["ready", "use_with_care", "not_usable"] | None = None
+
+
+class QualityCheck(Strict):
+    status: Literal["pass", "warn", "fail", "info"]
+    title: str
+    detail: str
+
+
+class QualityRejection(Strict):
+    reason: str
+    label: str
+    count: int
+
+
+class QualityColumn(Strict):
+    column: str
+    label: str
+    unit: str
+    min: float | None
+    max: float | None
+    mean: float | None
+    training_min: float | None
+    training_max: float | None
+    out_of_range: int
+
+
+class QualityLabels(Strict):
+    failure_rate: float
+    failures: int
+    by_mode: dict[str, int]
+
+
+class QualityReport(Strict):
+    """Whether an uploaded dataset is fit to predict on, and why."""
+
+    dataset_id: str
+    name: str
+    verdict: Literal["ready", "use_with_care", "not_usable"]
+    rows_received: int
+    rows_accepted: int
+    rows_rejected: int
+    rejections: list[QualityRejection]
+    columns: list[QualityColumn]
+    type_mix: dict[str, int]
+    labels: QualityLabels | None
+    limit_breaches: dict[str, int]
+    checks: list[QualityCheck]
 
 
 class AssetPage(Strict):
