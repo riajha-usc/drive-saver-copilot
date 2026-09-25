@@ -22,3 +22,12 @@ requirements-dev.txt
 
 # data/raw/ai4i2020.csv is deliberately NOT ignored. The image trains at build
 # time and needs it.
+
+# Documentation and local working files. None of this belongs in the build, and
+# the design notes, demo script and export files are local only.
+DESIGN_NOTES.md
+TECHNICAL_DOCUMENTATION.md
+docs/
+submission/
+.env.example
+.dockerignore
