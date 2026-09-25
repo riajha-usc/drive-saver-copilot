@@ -65,7 +65,15 @@ def test_many_skipped_rows_warn():
     assert report["rows_received"] == 27 and report["rows_accepted"] == 24
     assert report["rejections"][0]["reason"] == "non_positive_speed"
     warn = next(c for c in report["checks"] if c["title"] == "Some rows skipped")
-    assert warn["status"] == "warn" and "rotational speed of zero" in warn["detail"]
+    assert warn["status"] == "warn" and "rotational speed of zero or less (3)" in warn["detail"]
+
+
+def test_skipped_row_reasons_keep_their_capitals_and_counts():
+    report = build_report(frame(*good_rows(24), "Z,298.1,308.6,1551,42.8,20",
+                                "M,298.1,308.6,0,42.8,20"), RANGES)
+    detail = next(c for c in report["checks"] if c["title"] == "Some rows skipped")["detail"]
+    assert "product type not L, M or H (1)" in detail
+    assert "mostly" not in detail
 
 
 def test_readings_outside_the_training_range_warn():

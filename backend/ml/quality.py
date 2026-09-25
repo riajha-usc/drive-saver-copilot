@@ -38,6 +38,11 @@ OUT_OF_RANGE_WARN_SHARE = 0.01   # more than 1 percent of a column outside train
 SMALL_DATASET_ROWS = 20
 
 
+def _lower_first(text: str) -> str:
+    """Lower case only the first letter, so "L, M or H" keeps its capitals."""
+    return text[:1].lower() + text[1:]
+
+
 def _check(status: str, title: str, detail: str) -> dict:
     return {"status": status, "title": title, "detail": detail}
 
@@ -104,9 +109,13 @@ def build_report(frame: pd.DataFrame, training_ranges: dict | None) -> dict:
                              f"All {received:,} rows passed validation."))
     else:
         share = rejected / received
-        top = max(rejections, key=rejections.get) if rejections else None
+        # List the reasons with their counts rather than calling one "mostly":
+        # with several reasons at one row each, no single reason dominates.
+        reasons = sorted(rejections.items(), key=lambda kv: -kv[1])[:3]
+        listed = ", ".join(f"{_lower_first(REJECTION_LABELS.get(r, r))} ({n:,})"
+                           for r, n in reasons)
         detail = (f"{rejected:,} of {received:,} rows ({share:.1%}) were skipped"
-                  + (f", mostly: {REJECTION_LABELS.get(top, top).lower()}." if top else "."))
+                  + (f": {listed}." if listed else "."))
         checks.append(_check("warn" if share > REJECTED_WARN_SHARE else "pass",
                              "Some rows skipped", detail))
 
