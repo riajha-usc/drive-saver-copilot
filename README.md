@@ -7,7 +7,7 @@ Copilot goes one step further: it finds the smallest change to the drive's torqu
 and speed setpoints that pushes the failure past your next planned maintenance
 window, and tells you the hours gained, the risk removed and the money saved.
 
-Built for the ABB Accelerator 2026 challenge, Theme 1: Agentic Predictive
+Winning Project for the ABB Accelerator 2026 challenge, Theme 1: Agentic Predictive
 Maintenance Studio.
 
 **Live demo:** https://drive-saver-copilot-138499493256.us-central1.run.app
